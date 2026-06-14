@@ -55,7 +55,9 @@ export default function ProductosPage() {
 
   const [dialogProducto, setDialogProducto] = useState(false);
   const [dialogStock, setDialogStock] = useState(false);
+  const [dialogEliminar, setDialogEliminar] = useState(false);
   const [productoSeleccionado, setProductoSeleccionado] = useState<ProductoResponse | null>(null);
+  const [productoAEliminar, setProductoAEliminar] = useState<ProductoResponse | null>(null);
   const [form, setForm] = useState<ProductoRequest>(emptyForm);
   const [ajuste, setAjuste] = useState({ cantidad: 0, motivo: '' });
   const [saving, setSaving] = useState(false);
@@ -112,6 +114,11 @@ export default function ProductosPage() {
     setDialogStock(true);
   };
 
+  const abrirEliminar = (p: ProductoResponse) => {
+    setProductoAEliminar(p);
+    setDialogEliminar(true);
+  };
+
   const handleGuardar = async () => {
     setSaving(true);
     try {
@@ -129,10 +136,12 @@ export default function ProductosPage() {
     }
   };
 
-  const handleDesactivar = async (id: number) => {
-    if (!confirm('¿Desactivar este producto?')) return;
+  const handleDesactivar = async () => {
+    if (!productoAEliminar) return;
     try {
-      await desactivarProducto(id);
+      await desactivarProducto(productoAEliminar.id);
+      setDialogEliminar(false);
+      setProductoAEliminar(null);
       cargar();
     } catch {
       setError('Error al desactivar');
@@ -171,11 +180,7 @@ export default function ProductosPage() {
           variant="contained" disableElevation
           startIcon={<AddIcon />}
           onClick={abrirCrear}
-          sx={{
-            bgcolor: ACCENT, borderRadius: 2,
-            fontWeight: 600, px: 2.5, py: 1,
-            '&:hover': { bgcolor: '#2E4A7A' },
-          }}
+          sx={{ bgcolor: ACCENT, borderRadius: 2, fontWeight: 600, px: 2.5, py: 1, '&:hover': { bgcolor: '#2E4A7A' } }}
         >
           Nuevo producto
         </Button>
@@ -195,7 +200,7 @@ export default function ProductosPage() {
         </Box>
       )}
 
-      {error && <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>{error}</Alert>}
+      {error && <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }} onClose={() => setError(null)}>{error}</Alert>}
 
       {/* Filtros */}
       <Box sx={{ display: 'flex', gap: 1.5, mb: 2 }}>
@@ -220,11 +225,7 @@ export default function ProductosPage() {
         </FormControl>
         <Button
           variant="outlined" onClick={cargar}
-          sx={{
-            borderColor: '#E3E1DB', borderRadius: 2, color: '#3C3B38',
-            fontWeight: 500, px: 2,
-            '&:hover': { borderColor: ACCENT, color: ACCENT, bgcolor: ACCENT_BG },
-          }}
+          sx={{ borderColor: '#E3E1DB', borderRadius: 2, color: '#3C3B38', fontWeight: 500, px: 2, '&:hover': { borderColor: ACCENT, color: ACCENT, bgcolor: ACCENT_BG } }}
         >
           Buscar
         </Button>
@@ -260,13 +261,7 @@ export default function ProductosPage() {
                 </TableRow>
               ) : (
                 productos.map((p) => (
-                  <TableRow
-                    key={p.id}
-                    sx={{
-                      '&:hover': { bgcolor: '#FAFAF9' },
-                      '& td': { borderBottom: '1px solid #F0EEE8' },
-                    }}
-                  >
+                  <TableRow key={p.id} sx={{ '&:hover': { bgcolor: '#FAFAF9' }, '& td': { borderBottom: '1px solid #F0EEE8' } }}>
                     <TableCell>
                       <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: ACCENT, fontFamily: 'monospace' }}>
                         {p.codigo}
@@ -290,10 +285,7 @@ export default function ProductosPage() {
                       </Typography>
                     </TableCell>
                     <TableCell>
-                      <Typography sx={{
-                        fontWeight: 700, fontSize: '0.9rem',
-                        color: p.stockBajo ? '#C62828' : '#2C2C2A',
-                      }}>
+                      <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', color: p.stockBajo ? '#C62828' : '#2C2C2A' }}>
                         {p.stockActual}
                       </Typography>
                     </TableCell>
@@ -305,8 +297,7 @@ export default function ProductosPage() {
                           bgcolor: p.stockBajo ? '#FFEBEE' : '#E8F5E9',
                           color: p.stockBajo ? '#C62828' : '#2E7D32',
                           fontWeight: 600, fontSize: '0.75rem',
-                          height: 22, borderRadius: 1.5,
-                          border: 'none',
+                          height: 22, borderRadius: 1.5, border: 'none',
                         }}
                       />
                     </TableCell>
@@ -325,7 +316,7 @@ export default function ProductosPage() {
                           </IconButton>
                         </Tooltip>
                         <Tooltip title="Desactivar">
-                          <IconButton size="small" onClick={() => handleDesactivar(p.id)}
+                          <IconButton size="small" onClick={() => abrirEliminar(p)}
                             sx={{ color: '#888780', '&:hover': { color: '#C62828', bgcolor: '#FFEBEE' } }}>
                             <DeleteOutlinedIcon sx={{ fontSize: 16 }} />
                           </IconButton>
@@ -408,10 +399,7 @@ export default function ProductosPage() {
           </Grid>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-          <Button onClick={() => setDialogProducto(false)}
-            sx={{ color: '#888780', borderRadius: 2 }}>
-            Cancelar
-          </Button>
+          <Button onClick={() => setDialogProducto(false)} sx={{ color: '#888780', borderRadius: 2 }}>Cancelar</Button>
           <Button variant="contained" disableElevation onClick={handleGuardar} disabled={saving}
             sx={{ bgcolor: ACCENT, borderRadius: 2, fontWeight: 600, px: 3, '&:hover': { bgcolor: '#2E4A7A' } }}>
             {saving ? <CircularProgress size={18} color="inherit" /> : 'Guardar'}
@@ -422,9 +410,7 @@ export default function ProductosPage() {
       {/* Dialog — Ajuste de stock */}
       <Dialog open={dialogStock} onClose={() => setDialogStock(false)} maxWidth="xs" fullWidth
         slotProps={{ paper: { sx: { borderRadius: 3 } } }}>
-        <DialogTitle sx={{ fontWeight: 700, fontSize: '1.1rem', pb: 1 }}>
-          Ajustar stock
-        </DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700, fontSize: '1.1rem', pb: 1 }}>Ajustar stock</DialogTitle>
         <DialogContent>
           <Box sx={{ mb: 2, p: 1.5, bgcolor: ACCENT_BG, borderRadius: 2 }}>
             <Typography sx={{ fontSize: '0.85rem', color: ACCENT, fontWeight: 500 }}>
@@ -435,27 +421,46 @@ export default function ProductosPage() {
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <TextField
-              size="small" label="Cantidad (+ ingreso / - egreso)" type="number"
+            <TextField size="small" label="Cantidad (+ ingreso / - egreso)" type="number"
               value={ajuste.cantidad}
               onChange={(e) => setAjuste(a => ({ ...a, cantidad: Number(e.target.value) }))}
-              fullWidth sx={fieldSx}
-            />
-            <TextField
-              size="small" label="Motivo" value={ajuste.motivo}
+              fullWidth sx={fieldSx} />
+            <TextField size="small" label="Motivo" value={ajuste.motivo}
               onChange={(e) => setAjuste(a => ({ ...a, motivo: e.target.value }))}
-              fullWidth sx={fieldSx}
-            />
+              fullWidth sx={fieldSx} />
           </Box>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-          <Button onClick={() => setDialogStock(false)} sx={{ color: '#888780', borderRadius: 2 }}>
-            Cancelar
-          </Button>
+          <Button onClick={() => setDialogStock(false)} sx={{ color: '#888780', borderRadius: 2 }}>Cancelar</Button>
           <Button variant="contained" disableElevation onClick={handleAjusteStock}
             disabled={saving || !ajuste.motivo}
             sx={{ bgcolor: ACCENT, borderRadius: 2, fontWeight: 600, px: 3, '&:hover': { bgcolor: '#2E4A7A' } }}>
             {saving ? <CircularProgress size={18} color="inherit" /> : 'Confirmar ajuste'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog — Confirmar eliminación */}
+      <Dialog open={dialogEliminar} onClose={() => setDialogEliminar(false)} maxWidth="xs" fullWidth
+        slotProps={{ paper: { sx: { borderRadius: 3 } } }}>
+        <DialogTitle sx={{ fontWeight: 700, fontSize: '1.1rem', pb: 1 }}>
+          Desactivar producto
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, p: 1.5, bgcolor: '#FFEBEE', borderRadius: 2 }}>
+            <DeleteOutlinedIcon sx={{ color: '#C62828', fontSize: 20, flexShrink: 0, mt: 0.2 }} />
+            <Typography sx={{ fontSize: '0.9rem', color: '#C62828' }}>
+              ¿Deseas desactivar <strong>"{productoAEliminar?.nombre}"</strong>? Esta acción no se puede deshacer.
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+          <Button onClick={() => setDialogEliminar(false)} sx={{ color: '#888780', borderRadius: 2 }}>
+            Cancelar
+          </Button>
+          <Button variant="contained" disableElevation onClick={handleDesactivar}
+            sx={{ bgcolor: '#C62828', borderRadius: 2, fontWeight: 600, px: 3, '&:hover': { bgcolor: '#B71C1C' } }}>
+            Desactivar
           </Button>
         </DialogActions>
       </Dialog>
