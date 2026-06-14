@@ -1,6 +1,9 @@
-import { useState } from "react";
-import { useAuthStore } from "../../store/authStore";
-import { useNavigate } from "react-router-dom";
+import { useState } from 'react';
+import { useAuthStore } from '../../store/authStore';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
 
 export const useLogin = () => {
   const [loading, setLoading] = useState(false);
@@ -12,17 +15,39 @@ export const useLogin = () => {
     setLoading(true);
     setError(null);
     try {
-      // 🔧 MOCK temporal — reemplazar por loginApi cuando el backend esté listo
-      await new Promise((r) => setTimeout(r, 500)); // simula delay de red
-      if (username === 'admin' && password === '1234') {
-        setUser({ token: 'mock-token', rol: 'ADMIN', nombre: 'Admin' });
-        navigate('/dashboard');
-      } else if (username === 'cajero' && password === '1234') {
-        setUser({ token: 'mock-token', rol: 'CAJERO', nombre: 'Cajero' });
-        navigate('/cobro'); // ← antes era '/caja'
-      }
-      else {
-        setError('Usuario o contraseña incorrectos');
+      const res = await axios.post(`${API_BASE}/api/auth/login`, {
+        email: username,      // el back espera "email"
+        password,
+      });
+
+      const data = res.data.data; // ApiResponse<LoginResponse>
+
+      // El rol viene en el JWT como claim "roles" — lo decodificamos
+      const payload = JSON.parse(atob(data.token.split('.')[1]));
+      const roles: string[] = payload.roles ?? [];
+
+      // Mapeamos CAJERO si tiene el permiso VENTA_CREAR, sino ADMIN
+      const rol = roles.some((r: string) =>
+        r.toUpperCase().includes('CAJERO')
+      ) ? 'CAJERO' : 'ADMIN';
+
+      setUser({
+        token: data.token,
+        rol,
+        nombre: data.nombre,
+      });
+
+      // Guardamos el refreshToken para renovar sesión más adelante
+      localStorage.setItem('refreshToken', data.refreshToken);
+
+      navigate(rol === 'CAJERO' ? '/cobro' : '/dashboard');
+
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        const msg = err.response?.data?.message ?? err.response?.data?.error;
+        setError(msg ?? 'Usuario o contraseña incorrectos');
+      } else {
+        setError('Error de conexión con el servidor');
       }
     } finally {
       setLoading(false);
