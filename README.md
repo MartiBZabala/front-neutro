@@ -1,74 +1,195 @@
-# React + TypeScript + Vite
+<div align="center">
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+# 🛒 SuperMarket Control System
 
-Currently, two official plugins are available:
+### Sistema de Gestión y Control de Ventas para Supermercados
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+<p>
+Sistema web desarrollado para optimizar la administración de productos, usuarios y ventas dentro de un supermercado, ofreciendo una experiencia diferenciada para Administradores y Cajeros.
+</p>
 
-## React Compiler
+![React](https://img.shields.io/badge/React-Frontend-61DAFB?logo=react)
+![JavaScript](https://img.shields.io/badge/JavaScript-ES6-F7DF1E?logo=javascript)
+![Status](https://img.shields.io/badge/Estado-Finalizado-success)
+![GitHub](https://img.shields.io/badge/GitHub-Repository-black?logo=github)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+</div>
 
-## Expanding the ESLint configuration
+---
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## 📖 Descripción
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+**SuperMarket Control System** es una aplicación web diseñada para gestionar las operaciones diarias de un supermercado de manera eficiente y organizada.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+El sistema implementa un modelo de acceso basado en roles, permitiendo que cada usuario disponga únicamente de las funcionalidades correspondientes a sus responsabilidades.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+---
+
+## ✨ Funcionalidades
+
+### 👨‍💼 Administrador
+
+- Gestión completa de productos.
+- Alta, modificación y eliminación de artículos.
+- Administración de categorías.
+- Gestión de usuarios.
+- Consulta de ventas realizadas.
+- Control de stock.
+- Acceso a reportes y estadísticas.
+- Configuración general del sistema.
+
+### 👨‍💻 Cajero
+
+- Registro de ventas.
+- Búsqueda rápida de productos.
+- Consulta de stock disponible.
+- Gestión del carrito de compra.
+- Emisión de comprobantes.
+- Historial de ventas.
+
+---
+
+## 🔐 Control de Roles
+
+| Funcionalidad | Administrador | Cajero |
+|--------------|--------------|---------|
+| Gestionar Productos | ✅ | ❌ |
+| Gestionar Categorías | ✅ | ❌ |
+| Gestionar Usuarios | ✅ | ❌ |
+| Registrar Ventas | ✅ | ✅ |
+| Consultar Stock | ✅ | ✅ |
+| Ver Estadísticas | ✅ | ❌ |
+
+---
+
+## 🚀 Tecnologías Utilizadas
+
+| Tecnología | Uso |
+|------------|-----|
+| React | Desarrollo de la interfaz |
+| JavaScript | Lógica de negocio |
+| React Router | Navegación |
+| CSS | Estilos y diseño |
+| Local Storage / API | Persistencia de datos |
+| Git | Control de versiones |
+| GitHub | Repositorio remoto |
+
+---
+
+## 🏗️ Estructura del Proyecto
+
+```text
+src/
+│
+├── assets/
+├── components/
+│   ├── admin/
+│   ├── cashier/
+│   └── common/
+│
+├── context/
+├── hooks/
+├── pages/
+├── routes/
+├── services/
+├── utils/
+│
+├── App.jsx
+└── main.jsx
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+---
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## ⚙️ Instalación
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### 1️⃣ Clonar el repositorio
+
+```bash
+git clone https://github.com/TU-USUARIO/supermarket-control-system.git
 ```
-"# front-neutro" 
+
+### 2️⃣ Ingresar al proyecto
+
+```bash
+cd supermarket-control-system
+```
+
+### 3️⃣ Instalar dependencias
+
+```bash
+npm install
+```
+
+### 4️⃣ Ejecutar el proyecto
+
+```bash
+npm run dev
+```
+
+---
+
+## 📸 Capturas
+
+### 🔐 Pantalla de Login
+
+> Agregar captura del login aquí.
+
+---
+
+### 👨‍💼 Panel de Administración
+
+> Agregar captura del dashboard administrador aquí.
+
+---
+
+### 🛒 Módulo de Ventas
+
+> Agregar captura del sistema de ventas aquí.
+
+---
+
+### 📦 Gestión de Productos
+
+> Agregar captura del listado de productos aquí.
+
+---
+
+## 🎯 Objetivos del Proyecto
+
+- Implementar autenticación y autorización por roles.
+- Gestionar productos y ventas de manera eficiente.
+- Aplicar buenas prácticas de desarrollo Frontend.
+- Simular un entorno real de gestión comercial.
+- Desarrollar una interfaz intuitiva y responsive.
+
+---
+
+## 📈 Mejoras Futuras
+
+- Integración con Base de Datos.
+- Dashboard estadístico avanzado.
+- Generación de reportes PDF.
+- Gestión de proveedores.
+- Sistema de promociones y descuentos.
+- Integración con lector de código de barras.
+- Historial completo de auditoría.
+
+---
+
+## 👩‍💻 Autora
+
+### Martina Zabala
+
+📚 Programadora y Docente Universitaria
+
+✍️ Escritora y creadora de contenido educativo
+
+📷 Instagram: **@escritora_zabala**
+
+---
+
+<div align="center">
+
+### ⭐ Si te gustó este proyecto, no olvides darle una estrella ⭐
+
+</div>
