@@ -1,63 +1,82 @@
-import { Grid, Card, CardContent, Typography, Box, Button, Chip } from '@mui/material';
-import PointOfSaleOutlinedIcon from '@mui/icons-material/PointOfSaleOutlined';
+import { useState, useEffect } from 'react';
+import { Grid, Card, CardContent, Typography, Box, Button, Chip, CircularProgress } from '@mui/material';
 import InventoryOutlinedIcon from '@mui/icons-material/InventoryOutlined';
 import ReceiptOutlinedIcon from '@mui/icons-material/ReceiptOutlined';
 import BarChartOutlinedIcon from '@mui/icons-material/BarChartOutlined';
 import TrendingUpOutlinedIcon from '@mui/icons-material/TrendingUpOutlined';
 import TrendingDownOutlinedIcon from '@mui/icons-material/TrendingDownOutlined';
-import AccessTimeOutlinedIcon from '@mui/icons-material/AccessTimeOutlined';
+import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
+import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import { useNavigate } from 'react-router-dom';
+import { listarVentas } from '../../api/ventaApi';
+import { listarProductos } from '../../api/productoApi';
+import type { VentaResponse } from '../../types/venta';
 
 const ACCENT = '#3B5B8C';
 const ACCENT_BG = '#EEF2F8';
 
-const metrics = [
-  {
-    label: 'Ventas hoy',
-    value: '$124.500',
-    sub: '↑ 12% vs ayer',
-    trend: 'up',
-    icon: <TrendingUpOutlinedIcon sx={{ fontSize: 18 }} />,
-  },
-  {
-    label: 'Transacciones',
-    value: '87',
-    sub: 'Último cierre: 18:00',
-    trend: 'up',
-    icon: <TrendingUpOutlinedIcon sx={{ fontSize: 18 }} />,
-  },
-  {
-    label: 'Productos bajos',
-    value: '5',
-    sub: 'Requieren reposición',
-    trend: 'down',
-    icon: <TrendingDownOutlinedIcon sx={{ fontSize: 18 }} />,
-  },
-  {
-    label: 'Caja abierta',
-    value: 'Turno 2',
-    sub: 'Desde 14:00',
-    trend: 'neutral',
-    icon: <AccessTimeOutlinedIcon sx={{ fontSize: 18 }} />,
-  },
-];
-
-const lastTransactions = [
-  { id: '#1042', cajero: 'Cajero 1', hora: '14:32', monto: '$3.200' },
-  { id: '#1041', cajero: 'Cajero 2', hora: '14:18', monto: '$8.750' },
-  { id: '#1040', cajero: 'Cajero 1', hora: '13:55', monto: '$1.400' },
-  { id: '#1039', cajero: 'Cajero 2', hora: '13:41', monto: '$5.600' },
-];
-
 const quickAccess = [
-  { label: 'Abrir caja', path: '/caja', icon: <PointOfSaleOutlinedIcon /> },
-  { label: 'Productos', path: '/productos', icon: <InventoryOutlinedIcon /> },
-  { label: 'Facturar', path: '/facturacion', icon: <ReceiptOutlinedIcon /> },
-  { label: 'Reportes', path: '/reportes', icon: <BarChartOutlinedIcon /> },
+  { label: 'Productos',  path: '/productos',  icon: <InventoryOutlinedIcon /> },
+  { label: 'Personas',   path: '/personas',   icon: <PeopleOutlinedIcon /> },
+  { label: 'Ventas',     path: '/ventas',     icon: <ReceiptOutlinedIcon /> },
+  { label: 'Reportes',   path: '/reportes',   icon: <BarChartOutlinedIcon /> },
 ];
 
 export default function DashboardPage() {
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [ventasHoy, setVentasHoy] = useState<VentaResponse[]>([]);
+  const [stockBajo, setStockBajo] = useState(0);
+
+  useEffect(() => {
+    const hoy = new Date().toISOString().split('T')[0];
+    void Promise.all([
+      listarVentas(`${hoy}T00:00:00`, `${hoy}T23:59:59`, 0, 100),
+      listarProductos(undefined, undefined, 0, 200),
+    ]).then(([ventasRes, prodRes]) => {
+      setVentasHoy(ventasRes.data.data.content);
+      setStockBajo(prodRes.data.data.content.filter((p) => p.stockBajo).length);
+    }).finally(() => setLoading(false));
+  }, []);
+
+  const ventasCobradas = ventasHoy.filter(v => v.estado === 'PAGADA');
+  const totalHoy = ventasCobradas.reduce((acc, v) => acc + Number(v.total ?? 0), 0);
+  const ultimasVentas = [...ventasHoy]
+    .sort((a, b) => new Date(b.fechaHora).getTime() - new Date(a.fechaHora).getTime())
+    .slice(0, 5);
+
+  const metrics = [
+    {
+      label: 'Recaudado hoy',
+      value: loading ? '...' : `$${totalHoy.toLocaleString('es-AR')}`,
+      sub: `${ventasCobradas.length} venta${ventasCobradas.length !== 1 ? 's' : ''} cobrada${ventasCobradas.length !== 1 ? 's' : ''}`,
+      trend: 'up',
+      icon: <TrendingUpOutlinedIcon sx={{ fontSize: 18 }} />,
+    },
+    {
+      label: 'Transacciones hoy',
+      value: loading ? '...' : ventasHoy.length,
+      sub: `Total del día`,
+      trend: 'up',
+      icon: <TrendingUpOutlinedIcon sx={{ fontSize: 18 }} />,
+    },
+    {
+      label: 'Productos con stock bajo',
+      value: loading ? '...' : stockBajo,
+      sub: stockBajo > 0 ? 'Requieren reposición' : 'Stock OK',
+      trend: stockBajo > 0 ? 'down' : 'up',
+      icon: stockBajo > 0
+        ? <WarningAmberOutlinedIcon sx={{ fontSize: 18 }} />
+        : <TrendingUpOutlinedIcon sx={{ fontSize: 18 }} />,
+    },
+    {
+      label: 'Anuladas hoy',
+      value: loading ? '...' : ventasHoy.filter(v => v.estado === 'ANULADA').length,
+      sub: 'Del día actual',
+      trend: ventasHoy.filter(v => v.estado === 'ANULADA').length > 0 ? 'down' : 'neutral',
+      icon: <TrendingDownOutlinedIcon sx={{ fontSize: 18 }} />,
+    },
+  ];
 
   return (
     <Box>
@@ -76,10 +95,8 @@ export default function DashboardPage() {
         {metrics.map((m) => (
           <Grid size={{ xs: 12, sm: 6, md: 3 }} key={m.label}>
             <Card elevation={0} sx={{
-              border: '1px solid #E3E1DB',
-              bgcolor: 'background.paper',
-              borderRadius: 3,
-              transition: 'box-shadow 0.2s',
+              border: '1px solid #E3E1DB', bgcolor: 'background.paper',
+              borderRadius: 3, transition: 'box-shadow 0.2s',
               '&:hover': { boxShadow: '0 4px 20px rgba(0,0,0,0.07)' },
             }}>
               <CardContent sx={{ pb: '20px !important', pt: 2.5, px: 2.5 }}>
@@ -90,8 +107,7 @@ export default function DashboardPage() {
                   <Box sx={{
                     color: m.trend === 'up' ? '#2E7D32' : m.trend === 'down' ? '#C62828' : ACCENT,
                     bgcolor: m.trend === 'up' ? '#E8F5E9' : m.trend === 'down' ? '#FFEBEE' : ACCENT_BG,
-                    borderRadius: 2, p: 0.5,
-                    display: 'flex', alignItems: 'center',
+                    borderRadius: 2, p: 0.5, display: 'flex', alignItems: 'center',
                   }}>
                     {m.icon}
                   </Box>
@@ -111,42 +127,21 @@ export default function DashboardPage() {
       <Grid container spacing={2} sx={{ alignItems: 'stretch' }}>
         {/* Accesos rápidos */}
         <Grid size={{ xs: 12, md: 5 }} sx={{ display: 'flex' }}>
-          <Card elevation={0} sx={{
-            border: '1px solid #E3E1DB',
-            bgcolor: 'background.paper',
-            width: '100%',
-            borderRadius: 3,
-          }}>
+          <Card elevation={0} sx={{ border: '1px solid #E3E1DB', width: '100%', borderRadius: 3 }}>
             <CardContent sx={{ display: 'flex', flexDirection: 'column', height: '100%', p: 2.5 }}>
-              <Typography sx={{ fontWeight: 700, fontSize: '1.2rem', mb: 2, color: '#2C2C2A' }}>
+              <Typography sx={{ fontWeight: 700, fontSize: '1rem', mb: 2, color: '#2C2C2A' }}>
                 Accesos rápidos
               </Typography>
               <Grid container spacing={1.5} sx={{ flex: 1 }}>
                 {quickAccess.map((q) => (
                   <Grid size={{ xs: 6 }} key={q.label} sx={{ display: 'flex' }}>
-                    <Button
-                      fullWidth
-                      variant="outlined"
-                      startIcon={q.icon}
+                    <Button fullWidth variant="outlined" startIcon={q.icon}
                       onClick={() => navigate(q.path)}
                       sx={{
-                        justifyContent: 'flex-start',
-                        border: '1px solid #E3E1DB',
-                        borderRadius: 2.5,
-                        color: '#3C3B38',
-                        py: 1.5,
-                        px: 2,
-                        flex: 1,
-                        bgcolor: '#FAFAF9',
-                        fontSize: '1.1rem',
-                        fontWeight: 500,
-                        transition: 'all 0.15s',
-                        '&:hover': {
-                          bgcolor: ACCENT_BG,
-                          borderColor: ACCENT,
-                          color: ACCENT,
-                          '& .MuiButton-startIcon': { color: ACCENT },
-                        },
+                        justifyContent: 'flex-start', border: '1px solid #E3E1DB',
+                        borderRadius: 2.5, color: '#3C3B38', py: 1.5, px: 2, flex: 1,
+                        bgcolor: '#FAFAF9', fontWeight: 500, transition: 'all 0.15s',
+                        '&:hover': { bgcolor: ACCENT_BG, borderColor: ACCENT, color: ACCENT },
                       }}
                     >
                       {q.label}
@@ -158,71 +153,68 @@ export default function DashboardPage() {
           </Card>
         </Grid>
 
-        {/* Últimas transacciones */}
+        {/* Últimas ventas del día */}
         <Grid size={{ xs: 12, md: 7 }} sx={{ display: 'flex' }}>
-          <Card elevation={0} sx={{
-            border: '1px solid #E3E1DB',
-            bgcolor: 'background.paper',
-            width: '100%',
-            borderRadius: 3,
-          }}>
+          <Card elevation={0} sx={{ border: '1px solid #E3E1DB', width: '100%', borderRadius: 3 }}>
             <CardContent sx={{ display: 'flex', flexDirection: 'column', height: '100%', p: 2.5 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Typography sx={{ fontWeight: 700, fontSize: '1.2srem', color: '#2C2C2A' }}>
-                  Últimas transacciones
+                <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#2C2C2A' }}>
+                  Últimas ventas del día
                 </Typography>
-                <Chip
-                  label="En vivo"
-                  size="small"
-                  sx={{
-                    bgcolor: '#E8F5E9', color: '#2E7D32',
-                    fontWeight: 600, fontSize: '0.7rem',
-                    height: 22, borderRadius: 1.5,
-                    '& .MuiChip-label': { px: 1 },
-                  }}
-                />
+                <Chip label="Hoy" size="small"
+                  sx={{ bgcolor: ACCENT_BG, color: ACCENT, fontWeight: 600, fontSize: '0.7rem', height: 22, borderRadius: 1.5 }} />
               </Box>
-              <Box sx={{ flex: 1 }}>
-                {lastTransactions.map((tx, i) => (
-                  <Box
-                    key={tx.id}
-                    sx={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      py: 1.5,
-                      px: 1.5,
-                      borderRadius: 2,
-                      mb: 0.5,
-                      transition: 'bgcolor 0.15s',
-                      borderBottom: i < lastTransactions.length - 1 ? '1px solid #F0EEE8' : 'none',
+
+              {loading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                  <CircularProgress size={24} sx={{ color: ACCENT }} />
+                </Box>
+              ) : ultimasVentas.length === 0 ? (
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4, gap: 1 }}>
+                  <ReceiptOutlinedIcon sx={{ fontSize: 36, color: '#D3D1C7' }} />
+                  <Typography sx={{ color: '#B4B2A9', fontSize: '0.9rem' }}>Sin ventas hoy</Typography>
+                </Box>
+              ) : (
+                <Box sx={{ flex: 1 }}>
+                  {ultimasVentas.map((v, i) => (
+                    <Box key={v.id} sx={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      py: 1.5, px: 1.5, borderRadius: 2, mb: 0.5,
+                      borderBottom: i < ultimasVentas.length - 1 ? '1px solid #F0EEE8' : 'none',
                       '&:hover': { bgcolor: '#FAFAF9' },
-                    }}
-                  >
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                      <Box sx={{
-                        width: 36, height: 36, borderRadius: 2,
-                        bgcolor: ACCENT_BG,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        flexShrink: 0,
-                      }}>
-                        <ReceiptOutlinedIcon sx={{ fontSize: 16, color: ACCENT }} />
+                    }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                        <Box sx={{ width: 36, height: 36, borderRadius: 2, bgcolor: ACCENT_BG, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <ReceiptOutlinedIcon sx={{ fontSize: 16, color: ACCENT }} />
+                        </Box>
+                        <Box>
+                          <Typography sx={{ fontSize: '0.9rem', fontWeight: 600, color: '#2C2C2A' }}>
+                            Venta #{v.id}
+                          </Typography>
+                          <Typography sx={{ fontSize: '0.8rem', color: '#B4B2A9' }}>
+                            {new Date(v.fechaHora).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                            {v.nombrePersona ? ` — ${v.nombrePersona}` : ' — Consumidor final'}
+                          </Typography>
+                        </Box>
                       </Box>
-                      <Box>
-                        <Typography sx={{ fontSize: '0.99rem', fontWeight: 600, color: '#2C2C2A' }}>
-                          Venta {tx.id}
+                      <Box sx={{ textAlign: 'right' }}>
+                        <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', color: '#2C2C2A' }}>
+                          ${Number(v.total).toLocaleString('es-AR')}
                         </Typography>
-                        <Typography sx={{ fontSize: '0.8rem', color: '#B4B2A9' }}>
-                          {tx.hora} — {tx.cajero}
-                        </Typography>
+                        <Chip
+                          label={v.estado === 'PAGADA' ? 'Pagada' : v.estado === 'ANULADA' ? 'Anulada' : v.estado}
+                          size="small"
+                          sx={{
+                            bgcolor: v.estado === 'PAGADA' ? '#E8F5E9' : v.estado === 'ANULADA' ? '#FFEBEE' : '#FFF3E0',
+                            color: v.estado === 'PAGADA' ? '#2E7D32' : v.estado === 'ANULADA' ? '#C62828' : '#E65100',
+                            fontWeight: 600, fontSize: '0.65rem', height: 18, borderRadius: 1, border: 'none',
+                          }}
+                        />
                       </Box>
                     </Box>
-                    <Typography sx={{ fontWeight: 700, fontSize: '1.2rem', color: '#2C2C2A' }}>
-                      {tx.monto}
-                    </Typography>
-                  </Box>
-                ))}
-              </Box>
+                  ))}
+                </Box>
+              )}
             </CardContent>
           </Card>
         </Grid>

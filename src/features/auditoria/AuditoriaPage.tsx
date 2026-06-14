@@ -13,9 +13,9 @@ import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
 import PersonOffOutlinedIcon from '@mui/icons-material/PersonOffOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import { listarProductos } from '../../api/productoApi';
-import { listarRechazados } from '../../api/facturacionApi';
+import { listarVentas } from '../../api/ventaApi';
 import type { ProductoResponse } from '../../types/producto';
-import type { ComprobanteResponse } from '../../types/facturacion';
+import type { VentaResponse } from '../../types/venta';
 
 const ACCENT = '#3B5B8C';
 const ACCENT_BG = '#EEF2F8';
@@ -35,15 +35,15 @@ interface EventoAuditoria {
 }
 
 const ACCION_STYLE: Record<string, { color: string; bg: string; icon: React.ReactNode }> = {
-  ANULAR_VENTA:          { color: '#C62828', bg: '#FFEBEE', icon: <CancelOutlinedIcon sx={{ fontSize: 13 }} /> },
-  AJUSTE_STOCK:          { color: ACCENT,    bg: ACCENT_BG, icon: <TuneOutlinedIcon sx={{ fontSize: 13 }} /> },
-  BAJA_PRODUCTO:         { color: '#C62828', bg: '#FFEBEE', icon: <CancelOutlinedIcon sx={{ fontSize: 13 }} /> },
-  CREAR_EMPLEADO:        { color: '#2E7D32', bg: '#E8F5E9', icon: <PersonOffOutlinedIcon sx={{ fontSize: 13 }} /> },
-  BAJA_EMPLEADO:         { color: '#E65100', bg: '#FFF3E0', icon: <PersonOffOutlinedIcon sx={{ fontSize: 13 }} /> },
-  FIJAR_LIMITE_CC:       { color: '#6A1B9A', bg: '#F3E5F5', icon: <TuneOutlinedIcon sx={{ fontSize: 13 }} /> },
-  LIQUIDAR_CC_EMPLEADO:  { color: '#6A1B9A', bg: '#F3E5F5', icon: <HistoryOutlinedIcon sx={{ fontSize: 13 }} /> },
-  AJUSTE_CC:             { color: '#E65100', bg: '#FFF3E0', icon: <TuneOutlinedIcon sx={{ fontSize: 13 }} /> },
-  REINTENTAR_COMPROBANTE:{ color: '#C62828', bg: '#FFEBEE', icon: <WarningAmberOutlinedIcon sx={{ fontSize: 13 }} /> },
+  ANULAR_VENTA:           { color: '#C62828', bg: '#FFEBEE', icon: <CancelOutlinedIcon sx={{ fontSize: 13 }} /> },
+  AJUSTE_STOCK:           { color: ACCENT,    bg: ACCENT_BG, icon: <TuneOutlinedIcon sx={{ fontSize: 13 }} /> },
+  BAJA_PRODUCTO:          { color: '#C62828', bg: '#FFEBEE', icon: <CancelOutlinedIcon sx={{ fontSize: 13 }} /> },
+  CREAR_EMPLEADO:         { color: '#2E7D32', bg: '#E8F5E9', icon: <PersonOffOutlinedIcon sx={{ fontSize: 13 }} /> },
+  BAJA_EMPLEADO:          { color: '#E65100', bg: '#FFF3E0', icon: <PersonOffOutlinedIcon sx={{ fontSize: 13 }} /> },
+  FIJAR_LIMITE_CC:        { color: '#6A1B9A', bg: '#F3E5F5', icon: <TuneOutlinedIcon sx={{ fontSize: 13 }} /> },
+  LIQUIDAR_CC_EMPLEADO:   { color: '#6A1B9A', bg: '#F3E5F5', icon: <HistoryOutlinedIcon sx={{ fontSize: 13 }} /> },
+  AJUSTE_CC:              { color: '#E65100', bg: '#FFF3E0', icon: <TuneOutlinedIcon sx={{ fontSize: 13 }} /> },
+  REINTENTAR_COMPROBANTE: { color: '#C62828', bg: '#FFEBEE', icon: <WarningAmberOutlinedIcon sx={{ fontSize: 13 }} /> },
 };
 
 const TABLA_LABEL: Record<string, string> = {
@@ -75,25 +75,15 @@ const productosAEventos = (productos: ProductoResponse[]): EventoAuditoria[] =>
     detalle: `${p.nombre} — stock: ${p.stockActual} (mín: ${p.stockMinimo})`,
   }));
 
-const comprobantesAEventos = (comprobantes: ComprobanteResponse[]): EventoAuditoria[] =>
-  comprobantes.map((c) => ({
-    id: `comp-${c.id}`,
-    fecha: c.fechaEmision,
-    accion: 'REINTENTAR_COMPROBANTE',
-    tabla: 'comprobantes',
+const ventasAEventos = (ventas: VentaResponse[]): EventoAuditoria[] =>
+  ventas.map((v) => ({
+    id: `venta-${v.id}`,
+    fecha: v.fechaHora,
+    accion: 'ANULAR_VENTA',
+    tabla: 'ventas',
     usuario: 'Admin',
-    detalle: `Comprobante #${c.id} — venta #${c.ventaId} — ${c.errorArca ?? 'sin detalle'}`,
+    detalle: `Venta #${v.id}${v.nombrePersona ? ` — ${v.nombrePersona}` : ''} — total: $${Number(v.total).toLocaleString('es-AR')}`,
   }));
-
-const eventosMock: EventoAuditoria[] = [
-  { id: 'm1', fecha: new Date().toISOString(), accion: 'ANULAR_VENTA', tabla: 'ventas', usuario: 'Admin', detalle: 'Venta #1040 — motivo: producto vencido' },
-  { id: 'm2', fecha: new Date(Date.now() - 3600000).toISOString(), accion: 'CREAR_EMPLEADO', tabla: 'personas', usuario: 'Admin', detalle: 'Juan Pérez — legajo: EMP042' },
-  { id: 'm3', fecha: new Date(Date.now() - 7200000).toISOString(), accion: 'FIJAR_LIMITE_CC', tabla: 'cuentas_corrientes', usuario: 'Admin', detalle: 'María González — límite: $50.000' },
-  { id: 'm4', fecha: new Date(Date.now() - 86400000).toISOString(), accion: 'BAJA_PRODUCTO', tabla: 'productos', usuario: 'Admin', detalle: 'Producto ACE003 desactivado' },
-  { id: 'm5', fecha: new Date(Date.now() - 172800000).toISOString(), accion: 'BAJA_EMPLEADO', tabla: 'personas', usuario: 'Admin', detalle: 'Carlos López — fecha egreso: 11/06/2026' },
-  { id: 'm6', fecha: new Date(Date.now() - 259200000).toISOString(), accion: 'LIQUIDAR_CC_EMPLEADO', tabla: 'cuentas_corrientes', usuario: 'Admin', detalle: 'Liquidación mensual — $8.500' },
-  { id: 'm7', fecha: new Date(Date.now() - 345600000).toISOString(), accion: 'AJUSTE_CC', tabla: 'cuentas_corrientes', usuario: 'Admin', detalle: 'Ajuste admin — $2.000 — corrección manual' },
-];
 
 export default function AuditoriaPage() {
   const [eventos, setEventos] = useState<EventoAuditoria[]>([]);
@@ -109,15 +99,15 @@ export default function AuditoriaPage() {
     const init = async () => {
       setLoading(true);
       try {
-        const [prodRes, compRes] = await Promise.all([
-          listarProductos(undefined, undefined),
-          listarRechazados(),
+        const [prodRes, ventasRes] = await Promise.all([
+          listarProductos(undefined, undefined, 0, 200),
+          listarVentas('2000-01-01T00:00:00', '2099-12-31T23:59:59', 0, 200),
         ]);
         const stockBajo = prodRes.data.data.content.filter(p => p.stockBajo);
+        const ventasAnuladas = ventasRes.data.data.content.filter(v => v.estado === 'ANULADA');
         const todos = [
-          ...eventosMock,
+          ...ventasAEventos(ventasAnuladas),
           ...productosAEventos(stockBajo),
-          ...comprobantesAEventos(compRes.data.data),
         ].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
         setEventos(todos);
         setFiltrados(todos);
@@ -127,7 +117,7 @@ export default function AuditoriaPage() {
         setLoading(false);
       }
     };
-    init();
+    void init();
   }, []);
 
   const aplicarFiltros = () => {
@@ -170,14 +160,14 @@ export default function AuditoriaPage() {
         </Typography>
       </Box>
 
-      {error && <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>{error}</Alert>}
+      {error && <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }} onClose={() => setError(null)}>{error}</Alert>}
 
       {/* Métricas */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
         {[
           { label: 'Total eventos', value: eventos.length, icon: <HistoryOutlinedIcon sx={{ fontSize: 18 }} />, color: ACCENT, bg: ACCENT_BG },
           { label: 'Ventas anuladas', value: contarPor('ANULAR_VENTA'), icon: <CancelOutlinedIcon sx={{ fontSize: 18 }} />, color: '#C62828', bg: '#FFEBEE' },
-          { label: 'Ajustes de stock', value: contarPor('AJUSTE_STOCK'), icon: <TuneOutlinedIcon sx={{ fontSize: 18 }} />, color: ACCENT, bg: ACCENT_BG },
+          { label: 'Stock crítico', value: contarPor('AJUSTE_STOCK'), icon: <TuneOutlinedIcon sx={{ fontSize: 18 }} />, color: ACCENT, bg: ACCENT_BG },
           { label: 'Comp. rechazados', value: contarPor('REINTENTAR_COMPROBANTE'), icon: <WarningAmberOutlinedIcon sx={{ fontSize: 18 }} />, color: '#C62828', bg: '#FFEBEE' },
         ].map((m) => (
           <Grid size={{ xs: 12, sm: 6, md: 3 }} key={m.label}>
@@ -230,7 +220,7 @@ export default function AuditoriaPage() {
                     <Box sx={{ color: ACCION_STYLE[a]?.color ?? '#888780' }}>
                       {ACCION_STYLE[a]?.icon}
                     </Box>
-                    <Typography sx={{ fontSize: '0.85rem' }}>{a}</Typography>
+                    <Typography sx={{ fontSize: '0.85rem' }}>{a.replace(/_/g, ' ')}</Typography>
                   </Box>
                 </MenuItem>
               ))}
@@ -246,21 +236,18 @@ export default function AuditoriaPage() {
             slotProps={{ inputLabel: { shrink: true } }}
             sx={fieldSx}
           />
-          <Button
-            variant="contained" disableElevation onClick={aplicarFiltros}
-            sx={{ bgcolor: ACCENT, borderRadius: 2, fontWeight: 600, px: 2.5, '&:hover': { bgcolor: '#2E4A7A' } }}
-          >
+          <Button variant="contained" disableElevation onClick={aplicarFiltros}
+            sx={{ bgcolor: ACCENT, borderRadius: 2, fontWeight: 600, px: 2.5, '&:hover': { bgcolor: '#2E4A7A' } }}>
             Filtrar
           </Button>
           {tieneFilros && (
-            <Button onClick={limpiarFiltros}
-              sx={{ color: '#888780', borderRadius: 2, fontWeight: 500 }}>
+            <Button onClick={limpiarFiltros} sx={{ color: '#888780', borderRadius: 2, fontWeight: 500 }}>
               Limpiar
             </Button>
           )}
         </Box>
         {tieneFilros && (
-          <Box sx={{ px: 2, pb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ px: 2, pb: 1.5 }}>
             <Typography sx={{ fontSize: '0.78rem', color: '#888780' }}>
               Mostrando {filtrados.length} de {eventos.length} eventos
             </Typography>
@@ -296,65 +283,60 @@ export default function AuditoriaPage() {
                     </Box>
                   </TableCell>
                 </TableRow>
-              ) : (
-                filtrados.map((e) => {
-                  const style = ACCION_STYLE[e.accion] ?? { color: '#888780', bg: '#F5F5F5', icon: null };
-                  return (
-                    <TableRow key={e.id} sx={{
-                      '&:hover': { bgcolor: '#FAFAF9' },
-                      '& td': { borderBottom: '1px solid #F0EEE8' },
-                    }}>
-                      <TableCell>
-                        <Typography sx={{ fontSize: '0.82rem', color: '#888780', fontFamily: 'monospace' }}>
-                          {formatFecha(e.fecha)}
+              ) : filtrados.map((e) => {
+                const style = ACCION_STYLE[e.accion] ?? { color: '#888780', bg: '#F5F5F5', icon: null };
+                return (
+                  <TableRow key={e.id} sx={{ '&:hover': { bgcolor: '#FAFAF9' }, '& td': { borderBottom: '1px solid #F0EEE8' } }}>
+                    <TableCell>
+                      <Typography sx={{ fontSize: '0.82rem', color: '#888780', fontFamily: 'monospace' }}>
+                        {formatFecha(e.fecha)}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        icon={<Box sx={{ color: `${style.color} !important`, display: 'flex', pl: 0.5 }}>{style.icon}</Box>}
+                        label={e.accion.replace(/_/g, ' ')}
+                        size="small"
+                        sx={{
+                          bgcolor: style.bg, color: style.color,
+                          fontWeight: 700, fontSize: '0.72rem',
+                          height: 24, borderRadius: 1.5, border: 'none',
+                          '& .MuiChip-label': { px: 1 },
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                        <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: ACCENT, flexShrink: 0 }} />
+                        <Typography sx={{ fontSize: '0.82rem', color: '#5F5E5A', fontWeight: 500 }}>
+                          {TABLA_LABEL[e.tabla] ?? e.tabla}
                         </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          icon={<Box sx={{ color: `${style.color} !important`, display: 'flex', pl: 0.5 }}>{style.icon}</Box>}
-                          label={e.accion.replace(/_/g, ' ')}
-                          size="small"
-                          sx={{
-                            bgcolor: style.bg, color: style.color,
-                            fontWeight: 700, fontSize: '0.72rem',
-                            height: 24, borderRadius: 1.5, border: 'none',
-                            '& .MuiChip-label': { px: 1 },
-                          }}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                          <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: ACCENT, flexShrink: 0 }} />
-                          <Typography sx={{ fontSize: '0.82rem', color: '#5F5E5A', fontWeight: 500 }}>
-                            {TABLA_LABEL[e.tabla] ?? e.tabla}
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Box sx={{
+                          width: 26, height: 26, borderRadius: '50%',
+                          bgcolor: e.usuario === 'Sistema' ? '#F4F3F1' : ACCENT_BG,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                        }}>
+                          <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: e.usuario === 'Sistema' ? '#888780' : ACCENT }}>
+                            {e.usuario[0]}
                           </Typography>
                         </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Box sx={{
-                            width: 26, height: 26, borderRadius: '50%',
-                            bgcolor: e.usuario === 'Sistema' ? '#F4F3F1' : ACCENT_BG,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                          }}>
-                            <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: e.usuario === 'Sistema' ? '#888780' : ACCENT }}>
-                              {e.usuario[0]}
-                            </Typography>
-                          </Box>
-                          <Typography sx={{ fontSize: '0.85rem', fontWeight: 500, color: '#2C2C2A' }}>
-                            {e.usuario}
-                          </Typography>
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Typography sx={{ fontSize: '0.85rem', color: '#5F5E5A' }}>
-                          {e.detalle}
+                        <Typography sx={{ fontSize: '0.85rem', fontWeight: 500, color: '#2C2C2A' }}>
+                          {e.usuario}
                         </Typography>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <Typography sx={{ fontSize: '0.85rem', color: '#5F5E5A' }}>
+                        {e.detalle}
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         )}

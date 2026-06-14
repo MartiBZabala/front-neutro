@@ -1,6 +1,6 @@
 import type { MedioPago } from "./medioPago";
 
-export type EstadoVenta = 'EN_CURSO' | 'PAGADA' | 'CC_CARGADA' | 'ANULADA';
+export type EstadoVenta = 'EN_CURSO' | 'PENDIENTE_PAGO' | 'PAGADA' | 'CC_CARGADA' | 'ANULADA' | 'CANCELADA';
 
 export interface ItemResponse {
   id: number;

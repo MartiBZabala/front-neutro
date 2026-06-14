@@ -1,358 +1,330 @@
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-    Box, Card, CardContent, Typography, TextField, Button,
-    Grid, IconButton, Divider, Alert, Chip, CircularProgress
+    Box, Card, Typography, Button, Grid, Chip, CircularProgress,
+    Table, TableHead, TableRow, TableCell, TableBody, Alert,
+    TextField, Collapse,
 } from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
-import RemoveIcon from '@mui/icons-material/Remove';
-import SearchIcon from '@mui/icons-material/Search';
-import ShoppingCartOutlinedIcon from '@mui/icons-material/ShoppingCartOutlined';
 import ReceiptOutlinedIcon from '@mui/icons-material/ReceiptOutlined';
-import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
-import { useVenta } from './useVenta';
-import { buscarProductos, agregarItem } from '../../api/ventaApi';
-import type { ProductoResponse } from '../../types/producto';
-import type { MedioPago } from '../../types/medioPago';
-import { MEDIOS_PAGO } from '../../types/medioPago';
+import ExpandMoreOutlinedIcon from '@mui/icons-material/ExpandMoreOutlined';
+import ExpandLessOutlinedIcon from '@mui/icons-material/ExpandLessOutlined';
+import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
+import type { VentaResponse } from '../../types/venta';
+import { listarVentas } from '../../api/ventaApi';
 
 const ACCENT = '#3B5B8C';
 const ACCENT_BG = '#EEF2F8';
 
+const MEDIO_LABEL: Record<string, string> = {
+    EFECTIVO: 'Efectivo',
+    DEBITO: 'Débito',
+    CREDITO: 'Crédito',
+    TRANSFERENCIA: 'Transferencia',
+    CUENTA_CORRIENTE: 'Cta. Corriente',
+};
+
+const MEDIO_COLOR: Record<string, { color: string; bg: string }> = {
+    EFECTIVO:         { color: '#2E7D32', bg: '#E8F5E9' },
+    DEBITO:           { color: ACCENT,    bg: ACCENT_BG },
+    CREDITO:          { color: '#6A1B9A', bg: '#F3E5F5' },
+    TRANSFERENCIA:    { color: '#E65100', bg: '#FFF3E0' },
+    CUENTA_CORRIENTE: { color: '#888780', bg: '#F5F5F5' },
+};
+
+const ESTADO_STYLE: Record<string, { label: string; color: string; bg: string }> = {
+    EN_CURSO:       { label: 'En curso',  color: '#E65100', bg: '#FFF3E0' },
+    PENDIENTE_PAGO: { label: 'Pendiente', color: '#F59E0B', bg: '#FFF8E1' },
+    PAGADA:         { label: 'Pagada',    color: '#2E7D32', bg: '#E8F5E9' },
+    CC_CARGADA:     { label: 'Cta. Cte.', color: ACCENT,    bg: ACCENT_BG },
+    ANULADA:        { label: 'Anulada',   color: '#C62828', bg: '#FFEBEE' },
+    CANCELADA:      { label: 'Cancelada', color: '#888780', bg: '#F5F5F5' },
+};
+
 export default function VentasPage() {
-    const { venta, loading, error, iniciar, cobrar, reset } = useVenta();
-    const [busqueda, setBusqueda] = useState('');
-    const [productos, setProductos] = useState<ProductoResponse[]>([]);
-    const [buscando, setBuscando] = useState(false);
-    const [medioSeleccionado, setMedioSeleccionado] = useState<MedioPago>('EFECTIVO');
+    const [ventas, setVentas] = useState<VentaResponse[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [expandida, setExpandida] = useState<number | null>(null);
+    const [desde, setDesde] = useState('');
+    const [hasta, setHasta] = useState('');
 
-    const handleBuscar = async () => {
-        if (!busqueda.trim()) return;
-        setBuscando(true);
+    const cargar = async (desdeVal?: string, hastaVal?: string) => {
+        setLoading(true);
+        setError(null);
         try {
-            const res = await buscarProductos(busqueda);
-            setProductos(res.data.data);
+            const res = await listarVentas(
+                desdeVal ? desdeVal + 'T00:00:00' : '2000-01-01T00:00:00',
+                hastaVal ? hastaVal + 'T23:59:59' : '2099-12-31T23:59:59',
+            );
+            setVentas(res.data.data.content);
+        } catch {
+            setError('Error al cargar ventas');
         } finally {
-            setBuscando(false);
+            setLoading(false);
         }
     };
 
-    const handleAgregarProducto = async (producto: ProductoResponse) => {
-        let ventaActual = venta;
-        if (!ventaActual) {
-            ventaActual = await iniciar();
-            if (!ventaActual) return;
-        }
-        await agregarItem(ventaActual.id, { productoId: producto.id, cantidad: 1 });
+    useEffect(() => {
+        void cargar();
+    }, []);
+
+    const handleBuscar = () => void cargar(desde, hasta);
+
+    const handleLimpiar = () => {
+        setDesde('');
+        setHasta('');
+        void cargar();
     };
 
-    const handleCobrar = async () => {
-        await cobrar(medioSeleccionado, true);
-    };
-
-    const totalItems = venta?.items.reduce((acc, i) => acc + i.cantidad, 0) ?? 0;
+    const totalVentas = ventas.filter(v => v.estado === 'PAGADA').length;
+    const totalMonto = ventas
+        .filter(v => v.estado === 'PAGADA')
+        .reduce((acc, v) => acc + (v.total ?? 0), 0);
 
     return (
         <Box>
             {/* Encabezado */}
             <Box sx={{ mb: 3 }}>
                 <Typography sx={{ fontSize: '1.4rem', fontWeight: 700, color: '#2C2C2A', letterSpacing: '-0.3px' }}>
-                    Nueva venta
+                    Ventas
                 </Typography>
                 <Typography variant="body2" sx={{ color: '#888780', mt: 0.5 }}>
-                    Buscá productos y seleccioná el medio de pago
+                    Historial de transacciones
                 </Typography>
             </Box>
 
-            <Grid container spacing={2} sx={{ height: '100%' }}>
-                {/* Panel izquierdo */}
-                <Grid size={{ xs: 12, md: 7 }}>
-                    <Card elevation={0} sx={{
-                        border: '1px solid #E3E1DB',
-                        borderRadius: 3,
-                        height: '100%',
-                        transition: 'box-shadow 0.2s',
-                        '&:hover': { boxShadow: '0 4px 20px rgba(0,0,0,0.06)' },
-                    }}>
-                        <CardContent sx={{ p: 2.5 }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2.5 }}>
-                                <Box sx={{ bgcolor: ACCENT_BG, borderRadius: 1.5, p: 0.75, display: 'flex' }}>
-                                    <ShoppingCartOutlinedIcon sx={{ fontSize: 18, color: ACCENT }} />
-                                </Box>
-                                <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#2C2C2A' }}>
-                                    Buscar producto
-                                </Typography>
-                            </Box>
-
-                            <Box sx={{ display: 'flex', gap: 1, mb: 2.5 }}>
-                                <TextField
-                                    fullWidth
-                                    size="small"
-                                    placeholder="Nombre o código de barras..."
-                                    value={busqueda}
-                                    onChange={(e) => setBusqueda(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleBuscar()}
-                                    sx={{
-                                        '& .MuiOutlinedInput-root': {
-                                            borderRadius: 2,
-                                            bgcolor: '#FAFAF9',
-                                            '&:hover fieldset': { borderColor: ACCENT },
-                                            '&.Mui-focused fieldset': { borderColor: ACCENT, borderWidth: 1 },
-                                        },
-                                    }}
-                                />
-                                <Button
-                                    variant="contained"
-                                    disableElevation
-                                    onClick={handleBuscar}
-                                    disabled={buscando}
-                                    sx={{
-                                        px: 2, minWidth: 48, borderRadius: 2,
-                                        bgcolor: ACCENT, '&:hover': { bgcolor: '#2E4A7A' },
-                                    }}
-                                >
-                                    {buscando ? <CircularProgress size={18} color="inherit" /> : <SearchIcon fontSize="small" />}
-                                </Button>
-                            </Box>
-
-                            {error && <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>{error}</Alert>}
-
-                            {productos.length === 0 ? (
-                                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 6, gap: 1 }}>
-                                    <ShoppingCartOutlinedIcon sx={{ fontSize: 36, color: '#D3D1C7' }} />
-                                    <Typography sx={{ color: '#B4B2A9', fontSize: '0.9rem' }}>
-                                        Buscá un producto para agregarlo
+            {/* Métricas */}
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+                {[
+                    { label: 'Ventas cobradas', value: loading ? '...' : totalVentas, color: '#2E7D32', bg: '#E8F5E9' },
+                    { label: 'Total recaudado', value: loading ? '...' : `$${Number(totalMonto).toLocaleString('es-AR')}`, color: ACCENT, bg: ACCENT_BG },
+                    { label: 'Anuladas', value: loading ? '...' : ventas.filter(v => v.estado === 'ANULADA').length, color: '#C62828', bg: '#FFEBEE' },
+                ].map((m) => (
+                    <Grid size={{ xs: 12, sm: 4 }} key={m.label}>
+                        <Card elevation={0} sx={{ border: '1px solid #E3E1DB', borderRadius: 3, transition: 'box-shadow 0.2s', '&:hover': { boxShadow: '0 4px 20px rgba(0,0,0,0.07)' } }}>
+                            <Box sx={{ p: 2.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Box>
+                                    <Typography sx={{ fontSize: '0.82rem', color: '#888780', fontWeight: 500 }}>{m.label}</Typography>
+                                    <Typography sx={{ fontSize: '1.8rem', fontWeight: 700, color: '#2C2C2A', lineHeight: 1.2, mt: 0.5 }}>
+                                        {m.value}
                                     </Typography>
                                 </Box>
-                            ) : (
-                                productos.map((p) => (
-                                    <Box
-                                        key={p.id}
+                                <Box sx={{ bgcolor: m.bg, color: m.color, borderRadius: 2, p: 1, display: 'flex' }}>
+                                    <ReceiptOutlinedIcon sx={{ fontSize: 18 }} />
+                                </Box>
+                            </Box>
+                        </Card>
+                    </Grid>
+                ))}
+            </Grid>
+
+            {/* Filtros */}
+            <Box sx={{ display: 'flex', gap: 1.5, mb: 2, alignItems: 'center' }}>
+                <TextField
+                    size="small" type="date" label="Desde"
+                    value={desde} onChange={(e) => setDesde(e.target.value)}
+                    slotProps={{ inputLabel: { shrink: true } }}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: '#FAFAF9', '&:hover fieldset': { borderColor: ACCENT }, '&.Mui-focused fieldset': { borderColor: ACCENT, borderWidth: 1 } } }}
+                />
+                <TextField
+                    size="small" type="date" label="Hasta"
+                    value={hasta} onChange={(e) => setHasta(e.target.value)}
+                    slotProps={{ inputLabel: { shrink: true } }}
+                    sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: '#FAFAF9', '&:hover fieldset': { borderColor: ACCENT }, '&.Mui-focused fieldset': { borderColor: ACCENT, borderWidth: 1 } } }}
+                />
+                <Button
+                    variant="contained" disableElevation onClick={handleBuscar}
+                    startIcon={<SearchOutlinedIcon />}
+                    sx={{ bgcolor: ACCENT, borderRadius: 2, fontWeight: 600, px: 2.5, '&:hover': { bgcolor: '#2E4A7A' } }}
+                >
+                    Buscar
+                </Button>
+                {(desde || hasta) && (
+                    <Button onClick={handleLimpiar} sx={{ color: '#888780', borderRadius: 2 }}>
+                        Limpiar
+                    </Button>
+                )}
+            </Box>
+
+            {error && <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }} onClose={() => setError(null)}>{error}</Alert>}
+
+            {/* Tabla */}
+            <Card elevation={0} sx={{ border: '1px solid #E3E1DB', borderRadius: 3, overflow: 'hidden' }}>
+                {loading ? (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 6, gap: 2 }}>
+                        <CircularProgress size={28} sx={{ color: ACCENT }} />
+                        <Typography sx={{ color: '#B4B2A9', fontSize: '0.9rem' }}>Cargando ventas...</Typography>
+                    </Box>
+                ) : (
+                    <Table size="small">
+                        <TableHead>
+                            <TableRow sx={{ bgcolor: '#F4F3F1' }}>
+                                {['#', 'Fecha y hora', 'Cliente', 'Productos', 'Medio de pago', 'Total', 'Estado', ''].map((col) => (
+                                    <TableCell key={col} sx={{ fontWeight: 700, color: '#888780', fontSize: '0.8rem', letterSpacing: '0.3px', py: 1.5 }}>
+                                        {col}
+                                    </TableCell>
+                                ))}
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {ventas.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={8}>
+                                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 6, gap: 1 }}>
+                                            <ReceiptOutlinedIcon sx={{ fontSize: 40, color: '#D3D1C7' }} />
+                                            <Typography sx={{ color: '#B4B2A9', fontSize: '0.9rem' }}>No hay ventas en el período</Typography>
+                                        </Box>
+                                    </TableCell>
+                                </TableRow>
+                            ) : ventas.map((v) => (
+                                <React.Fragment key={v.id}>
+                                    <TableRow
+                                        onClick={() => setExpandida(expandida === v.id ? null : v.id)}
                                         sx={{
-                                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                            py: 1.5, px: 1, borderRadius: 2, mb: 0.5,
-                                            borderBottom: '1px solid #F0EEE8',
-                                            transition: 'bgcolor 0.15s',
+                                            cursor: 'pointer',
                                             '&:hover': { bgcolor: '#FAFAF9' },
+                                            '& td': { borderBottom: expandida === v.id ? 'none' : '1px solid #F0EEE8' },
+                                            bgcolor: expandida === v.id ? '#FAFAF9' : 'transparent',
                                         }}
                                     >
-                                        <Box>
-                                            <Typography sx={{ fontWeight: 600, fontSize: '0.95rem', color: '#2C2C2A' }}>
-                                                {p.nombre}
+                                        <TableCell>
+                                            <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: ACCENT, fontFamily: 'monospace' }}>
+                                                #{v.id}
                                             </Typography>
-                                            <Typography sx={{ fontSize: '0.82rem', color: '#888780', mt: 0.25 }}>
-                                                ${p.precioLista1?.toLocaleString('es-AR')} · Stock: {p.stockActual}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Typography sx={{ fontSize: '0.82rem', color: '#888780' }}>
+                                                {new Date(v.fechaHora).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                             </Typography>
-                                        </Box>
-                                        <Button
-                                            size="small"
-                                            variant="outlined"
-                                            onClick={() => handleAgregarProducto(p)}
-                                            disabled={loading || p.stockActual === 0}
-                                            sx={{
-                                                borderColor: ACCENT, color: ACCENT, borderRadius: 2,
-                                                fontWeight: 600, fontSize: '0.82rem',
-                                                '&:hover': { bgcolor: ACCENT_BG, borderColor: ACCENT },
-                                            }}
-                                        >
-                                            + Agregar
-                                        </Button>
-                                    </Box>
-                                ))
-                            )}
-                        </CardContent>
-                    </Card>
-                </Grid>
-
-                {/* Panel derecho */}
-                <Grid size={{ xs: 12, md: 5 }} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    {/* Cliente */}
-                    <Card elevation={0} sx={{ border: '1px solid #E3E1DB', borderRadius: 3 }}>
-                        <CardContent sx={{ p: 2.5 }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-                                <Box sx={{ bgcolor: ACCENT_BG, borderRadius: 1.5, p: 0.75, display: 'flex' }}>
-                                    <PersonOutlinedIcon sx={{ fontSize: 18, color: ACCENT }} />
-                                </Box>
-                                <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#2C2C2A' }}>
-                                    Cliente{' '}
-                                    <Typography component="span" sx={{ fontWeight: 400, fontSize: '0.85rem', color: '#B4B2A9' }}>
-                                        (opcional)
-                                    </Typography>
-                                </Typography>
-                            </Box>
-                            <TextField
-                                fullWidth size="small"
-                                placeholder="Buscar por nombre o DNI..."
-                                sx={{
-                                    '& .MuiOutlinedInput-root': {
-                                        borderRadius: 2, bgcolor: '#FAFAF9',
-                                        '&:hover fieldset': { borderColor: ACCENT },
-                                        '&.Mui-focused fieldset': { borderColor: ACCENT, borderWidth: 1 },
-                                    },
-                                }}
-                            />
-                        </CardContent>
-                    </Card>
-
-                    {/* Carrito */}
-                    <Card elevation={0} sx={{ border: '1px solid #E3E1DB', borderRadius: 3, flex: 1 }}>
-                        <CardContent sx={{ p: 2.5 }}>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <Box sx={{ bgcolor: ACCENT_BG, borderRadius: 1.5, p: 0.75, display: 'flex' }}>
-                                        <ReceiptOutlinedIcon sx={{ fontSize: 18, color: ACCENT }} />
-                                    </Box>
-                                    <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#2C2C2A' }}>
-                                        Carrito
-                                    </Typography>
-                                </Box>
-                                {totalItems > 0 && (
-                                    <Chip
-                                        label={`${totalItems} ítem${totalItems > 1 ? 's' : ''}`}
-                                        size="small"
-                                        sx={{
-                                            bgcolor: ACCENT_BG, color: ACCENT,
-                                            fontWeight: 600, fontSize: '0.75rem',
-                                            height: 22, borderRadius: 1.5,
-                                        }}
-                                    />
-                                )}
-                            </Box>
-
-                            {!venta || venta.items.length === 0 ? (
-                                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4, gap: 1 }}>
-                                    <ReceiptOutlinedIcon sx={{ fontSize: 32, color: '#D3D1C7' }} />
-                                    <Typography sx={{ color: '#B4B2A9', fontSize: '0.9rem' }}>
-                                        Sin productos aún
-                                    </Typography>
-                                </Box>
-                            ) : (
-                                <>
-                                    {venta.items.map((item) => (
-                                        <Box key={item.id} sx={{
-                                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                            py: 1.2, px: 1, borderRadius: 2, mb: 0.5,
-                                            borderBottom: '1px solid #F0EEE8',
-                                            '&:hover': { bgcolor: '#FAFAF9' },
-                                        }}>
-                                            <Typography sx={{ flex: 1, fontSize: '0.9rem', fontWeight: 500, color: '#2C2C2A' }}>
-                                                {item.nombreProducto}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Typography sx={{ fontSize: '0.85rem', color: v.nombrePersona ? '#2C2C2A' : '#B4B2A9', fontWeight: v.nombrePersona ? 500 : 400 }}>
+                                                {v.nombrePersona ?? 'Consumidor final'}
                                             </Typography>
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                                <IconButton size="small" sx={{
-                                                    border: '1px solid #E3E1DB', borderRadius: 1.5, p: 0.3,
-                                                    '&:hover': { bgcolor: ACCENT_BG, borderColor: ACCENT },
-                                                }}>
-                                                    <RemoveIcon sx={{ fontSize: 14 }} />
-                                                </IconButton>
-                                                <Typography sx={{ mx: 0.75, minWidth: 20, textAlign: 'center', fontWeight: 600, fontSize: '0.9rem' }}>
-                                                    {item.cantidad}
-                                                </Typography>
-                                                <IconButton size="small" sx={{
-                                                    border: '1px solid #E3E1DB', borderRadius: 1.5, p: 0.3,
-                                                    '&:hover': { bgcolor: ACCENT_BG, borderColor: ACCENT },
-                                                }}>
-                                                    <AddIcon sx={{ fontSize: 14 }} />
-                                                </IconButton>
-                                                <Typography sx={{ fontWeight: 700, ml: 1, minWidth: 64, textAlign: 'right', fontSize: '0.9rem', color: '#2C2C2A' }}>
-                                                    ${item.subtotal.toLocaleString('es-AR')}
-                                                </Typography>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Typography sx={{ fontSize: '0.85rem', color: '#5F5E5A' }}>
+                                                {v.items?.reduce((acc, i) => acc + i.cantidad, 0) ?? 0} unid. · {v.items?.length ?? 0} ítem{(v.items?.length ?? 0) !== 1 ? 's' : ''}
+                                            </Typography>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                                                {v.pagos?.map((p, i) => {
+                                                    const style = MEDIO_COLOR[p.medio] ?? { color: '#888780', bg: '#F5F5F5' };
+                                                    return (
+                                                        <Chip key={i} label={MEDIO_LABEL[p.medio] ?? p.medio} size="small"
+                                                            sx={{ bgcolor: style.bg, color: style.color, fontWeight: 600, fontSize: '0.72rem', height: 20, borderRadius: 1, border: 'none' }} />
+                                                    );
+                                                })}
                                             </Box>
-                                        </Box>
-                                    ))}
-
-                                    <Box sx={{ mt: 2, px: 1 }}>
-                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                                            <Typography sx={{ fontSize: '0.875rem', color: '#888780' }}>Subtotal</Typography>
-                                            <Typography sx={{ fontSize: '0.875rem', color: '#2C2C2A' }}>${venta.subtotal?.toLocaleString('es-AR')}</Typography>
-                                        </Box>
-                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                                            <Typography sx={{ fontSize: '0.875rem', color: '#888780' }}>IVA</Typography>
-                                            <Typography sx={{ fontSize: '0.875rem', color: '#2C2C2A' }}>${venta.totalIva?.toLocaleString('es-AR')}</Typography>
-                                        </Box>
-                                        <Divider sx={{ my: 1.5, borderColor: '#E3E1DB' }} />
-                                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                                            <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', color: '#2C2C2A' }}>Total</Typography>
-                                            <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', color: ACCENT }}>
-                                                ${venta.total?.toLocaleString('es-AR')}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', color: '#2C2C2A' }}>
+                                                ${Number(v.total).toLocaleString('es-AR')}
                                             </Typography>
-                                        </Box>
-                                    </Box>
-                                </>
-                            )}
-                        </CardContent>
-                    </Card>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Chip
+                                                label={ESTADO_STYLE[v.estado]?.label ?? v.estado}
+                                                size="small"
+                                                sx={{
+                                                    bgcolor: ESTADO_STYLE[v.estado]?.bg ?? '#F5F5F5',
+                                                    color: ESTADO_STYLE[v.estado]?.color ?? '#888780',
+                                                    fontWeight: 600, fontSize: '0.72rem',
+                                                    height: 22, borderRadius: 1.5, border: 'none',
+                                                }}
+                                            />
+                                        </TableCell>
+                                        <TableCell>
+                                            {expandida === v.id
+                                                ? <ExpandLessOutlinedIcon sx={{ fontSize: 18, color: '#B4B2A9' }} />
+                                                : <ExpandMoreOutlinedIcon sx={{ fontSize: 18, color: '#B4B2A9' }} />
+                                            }
+                                        </TableCell>
+                                    </TableRow>
 
-                    {/* Medio de pago */}
-                    <Card elevation={0} sx={{ border: '1px solid #E3E1DB', borderRadius: 3 }}>
-                        <CardContent sx={{ p: 2.5 }}>
-                            <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#2C2C2A', mb: 1.5 }}>
-                                Medio de pago
-                            </Typography>
-                            <Grid container spacing={1} sx={{ mb: 2 }}>
-                                {MEDIOS_PAGO.map((m) => (
-                                    <Grid size={{ xs: 6 }} key={m.value}>
-                                        <Button
-                                            fullWidth
-                                            variant={medioSeleccionado === m.value ? 'contained' : 'outlined'}
-                                            disableElevation
-                                            onClick={() => setMedioSeleccionado(m.value)}
-                                            sx={{
-                                                borderRadius: 2,
-                                                borderColor: medioSeleccionado === m.value ? ACCENT : '#E3E1DB',
-                                                bgcolor: medioSeleccionado === m.value ? ACCENT : '#FAFAF9',
-                                                color: medioSeleccionado === m.value ? '#fff' : '#3C3B38',
-                                                fontWeight: medioSeleccionado === m.value ? 600 : 400,
-                                                py: 1,
-                                                fontSize: '0.85rem',
-                                                transition: 'all 0.15s',
-                                                '&:hover': {
-                                                    bgcolor: medioSeleccionado === m.value ? '#2E4A7A' : ACCENT_BG,
-                                                    borderColor: ACCENT,
-                                                    color: medioSeleccionado === m.value ? '#fff' : ACCENT,
-                                                },
-                                            }}
-                                        >
-                                            {m.label}
-                                        </Button>
-                                    </Grid>
-                                ))}
-                            </Grid>
+                                    {/* Detalle expandible */}
+                                    {expandida === v.id && (
+                                        <TableRow>
+                                            <TableCell colSpan={8} sx={{ p: 0, borderBottom: '1px solid #F0EEE8' }}>
+                                                <Collapse in={true}>
+                                                    <Box sx={{ p: 2, bgcolor: '#F9F9F8', borderTop: '1px solid #F0EEE8' }}>
+                                                        <Grid container spacing={2}>
+                                                            <Grid size={{ xs: 12, md: 7 }}>
+                                                                <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#888780', mb: 1, letterSpacing: '0.3px' }}>
+                                                                    PRODUCTOS
+                                                                </Typography>
+                                                                {v.items?.map((item) => (
+                                                                    <Box key={item.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 0.75, borderBottom: '1px solid #F0EEE8' }}>
+                                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                                            <Chip label={item.cantidad} size="small"
+                                                                                sx={{ bgcolor: ACCENT_BG, color: ACCENT, fontWeight: 700, fontSize: '0.72rem', height: 18, borderRadius: 1, border: 'none', minWidth: 24 }} />
+                                                                            <Typography sx={{ fontSize: '0.85rem', color: '#2C2C2A' }}>{item.nombreProducto}</Typography>
+                                                                        </Box>
+                                                                        <Box sx={{ textAlign: 'right' }}>
+                                                                            <Typography sx={{ fontSize: '0.82rem', color: '#888780' }}>
+                                                                                ${Number(item.precioUnitario).toLocaleString('es-AR')} c/u
+                                                                            </Typography>
+                                                                            <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: '#2C2C2A' }}>
+                                                                                ${Number(item.subtotal).toLocaleString('es-AR')}
+                                                                            </Typography>
+                                                                        </Box>
+                                                                    </Box>
+                                                                ))}
+                                                            </Grid>
 
-                            <Button
-                                fullWidth variant="contained" disableElevation
-                                disabled={loading || !venta || venta.items.length === 0}
-                                onClick={handleCobrar}
-                                sx={{
-                                    py: 1.5, borderRadius: 2,
-                                    bgcolor: ACCENT, fontSize: '1rem', fontWeight: 700,
-                                    letterSpacing: '0.2px',
-                                    '&:hover': { bgcolor: '#2E4A7A' },
-                                    '&.Mui-disabled': { bgcolor: '#E3E1DB', color: '#B4B2A9' },
-                                }}
-                            >
-                                {loading
-                                    ? <CircularProgress size={20} color="inherit" />
-                                    : `Cobrar $${venta?.total?.toLocaleString('es-AR') ?? '0'}`
-                                }
-                            </Button>
+                                                            <Grid size={{ xs: 12, md: 5 }}>
+                                                                <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#888780', mb: 1, letterSpacing: '0.3px' }}>
+                                                                    RESUMEN
+                                                                </Typography>
+                                                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                                        <Typography sx={{ fontSize: '0.85rem', color: '#888780' }}>Subtotal</Typography>
+                                                                        <Typography sx={{ fontSize: '0.85rem', color: '#2C2C2A' }}>${Number(v.subtotal).toLocaleString('es-AR')}</Typography>
+                                                                    </Box>
+                                                                    {v.descuentoMonto > 0 && (
+                                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                                            <Typography sx={{ fontSize: '0.85rem', color: '#2E7D32' }}>Descuento</Typography>
+                                                                            <Typography sx={{ fontSize: '0.85rem', color: '#2E7D32' }}>-${Number(v.descuentoMonto).toLocaleString('es-AR')}</Typography>
+                                                                        </Box>
+                                                                    )}
+                                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                                        <Typography sx={{ fontSize: '0.85rem', color: '#888780' }}>IVA</Typography>
+                                                                        <Typography sx={{ fontSize: '0.85rem', color: '#2C2C2A' }}>${Number(v.totalIva).toLocaleString('es-AR')}</Typography>
+                                                                    </Box>
+                                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 0.5, borderTop: '1px solid #E3E1DB', mt: 0.5 }}>
+                                                                        <Typography sx={{ fontSize: '0.95rem', fontWeight: 700, color: '#2C2C2A' }}>Total</Typography>
+                                                                        <Typography sx={{ fontSize: '0.95rem', fontWeight: 700, color: ACCENT }}>${Number(v.total).toLocaleString('es-AR')}</Typography>
+                                                                    </Box>
+                                                                </Box>
 
-                            {venta && venta.estado !== 'EN_CURSO' && (
-                                <Button
-                                    fullWidth variant="outlined"
-                                    onClick={reset}
-                                    sx={{
-                                        mt: 1, borderRadius: 2,
-                                        borderColor: '#E3E1DB', color: '#888780',
-                                        '&:hover': { borderColor: ACCENT, color: ACCENT, bgcolor: ACCENT_BG },
-                                    }}
-                                >
-                                    Nueva venta
-                                </Button>
-                            )}
-                        </CardContent>
-                    </Card>
-                </Grid>
-            </Grid>
+                                                                <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: '#888780', mt: 2, mb: 1, letterSpacing: '0.3px' }}>
+                                                                    PAGOS
+                                                                </Typography>
+                                                                {v.pagos?.map((p, i) => {
+                                                                    const style = MEDIO_COLOR[p.medio] ?? { color: '#888780', bg: '#F5F5F5' };
+                                                                    return (
+                                                                        <Box key={i} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 0.5 }}>
+                                                                            <Chip label={MEDIO_LABEL[p.medio] ?? p.medio} size="small"
+                                                                                sx={{ bgcolor: style.bg, color: style.color, fontWeight: 600, fontSize: '0.72rem', height: 20, borderRadius: 1, border: 'none' }} />
+                                                                            <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: '#2C2C2A' }}>
+                                                                                ${Number(p.monto).toLocaleString('es-AR')}
+                                                                            </Typography>
+                                                                        </Box>
+                                                                    );
+                                                                })}
+                                                            </Grid>
+                                                        </Grid>
+                                                    </Box>
+                                                </Collapse>
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </React.Fragment>
+                            ))}
+                        </TableBody>
+                    </Table>
+                )}
+            </Card>
         </Box>
     );
 }

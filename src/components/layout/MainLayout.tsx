@@ -26,15 +26,15 @@ const DRAWER_WIDTH = 230;
 const DRAWER_COLLAPSED = 64;
 
 const navItems = [
-  { label: 'Dashboard', path: '/dashboard', icon: <DashboardOutlinedIcon fontSize="small" />, section: 'GENERAL' },
-  { label: 'Caja', path: '/caja', icon: <PointOfSaleOutlinedIcon fontSize="small" />, section: 'GENERAL' },
-  { label: 'Ventas', path: '/ventas', icon: <ShoppingBagOutlinedIcon fontSize="small" />, section: 'GENERAL' },
-  { label: 'Productos', path: '/productos', icon: <InventoryOutlinedIcon fontSize="small" />, section: 'GENERAL' },
-  { label: 'Personas', path: '/personas', icon: <PeopleOutlinedIcon fontSize="small" />, section: 'GENERAL' },
-  { label: 'Facturación', path: '/facturacion', icon: <ReceiptOutlinedIcon fontSize="small" />, section: 'GENERAL' },
-  { label: 'Cta. Corriente', path: '/cta-corriente', icon: <AccountBalanceOutlinedIcon fontSize="small" />, section: 'GENERAL' },
-  { label: 'Reportes', path: '/reportes', icon: <BarChartOutlinedIcon fontSize="small" />, section: 'REPORTES' },
-  { label: 'Auditoría', path: '/auditoria', icon: <VerifiedUserOutlinedIcon fontSize="small" />, section: 'REPORTES' },
+  { label: 'Dashboard',    path: '/dashboard',    icon: <DashboardOutlinedIcon fontSize="small" />,      section: 'GENERAL',   roles: ['ADMIN'] },
+  { label: 'Caja',         path: '/caja',         icon: <PointOfSaleOutlinedIcon fontSize="small" />,    section: 'GENERAL',   roles: ['CAJERO'] },
+  { label: 'Ventas',       path: '/ventas',       icon: <ShoppingBagOutlinedIcon fontSize="small" />,    section: 'GENERAL',   roles: ['ADMIN'] },
+  { label: 'Productos',    path: '/productos',    icon: <InventoryOutlinedIcon fontSize="small" />,      section: 'GENERAL',   roles: ['ADMIN'] },
+  { label: 'Personas',     path: '/personas',     icon: <PeopleOutlinedIcon fontSize="small" />,         section: 'GENERAL',   roles: ['ADMIN'] },
+  { label: 'Facturación',  path: '/facturacion',  icon: <ReceiptOutlinedIcon fontSize="small" />,        section: 'GENERAL',   roles: ['ADMIN'] },
+  { label: 'Cta. Corriente', path: '/cta-corriente', icon: <AccountBalanceOutlinedIcon fontSize="small" />, section: 'GENERAL', roles: ['ADMIN'] },
+  { label: 'Reportes',     path: '/reportes',     icon: <BarChartOutlinedIcon fontSize="small" />,       section: 'REPORTES',  roles: ['ADMIN'] },
+  { label: 'Auditoría',    path: '/auditoria',    icon: <VerifiedUserOutlinedIcon fontSize="small" />,   section: 'REPORTES',  roles: ['ADMIN'] },
 ];
 
 export default function MainLayout() {
@@ -50,6 +50,9 @@ export default function MainLayout() {
   };
 
   const sections = ['GENERAL', 'REPORTES'];
+  const sectionesVisibles = sections.filter(section =>
+  navItems.some(i => i.section === section && i.roles.includes(user?.rol ?? ''))
+);
 
   return (
     <Box sx={{ display: 'flex', height: '100vh', bgcolor: '#F7F7F5' }}>
@@ -99,7 +102,7 @@ export default function MainLayout() {
 
         {/* Nav */}
         <Box sx={{ flex: 1, overflowY: 'auto', py: 1.5 }}>
-          {sections.map((section) => (
+          {sectionesVisibles.map((section) => (
             <Box key={section} sx={{ mb: 1 }}>
               {!collapsed && (
                 <Typography sx={{
@@ -114,7 +117,7 @@ export default function MainLayout() {
                 </Typography>
               )}
               <List dense disablePadding sx={{ px: 1 }}>
-                {navItems.filter(i => i.section === section).map((item) => {
+                {navItems.filter(i => i.section === section && i.roles.includes(user?.rol ?? '')).map((item) => {
                   const isActive = location.pathname === item.path;
                   return (
                     <Tooltip key={item.path} title={collapsed ? item.label : ''} placement="right">

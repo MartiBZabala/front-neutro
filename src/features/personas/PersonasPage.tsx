@@ -21,8 +21,7 @@ const ACCENT_BG = '#EEF2F8';
 
 const fieldSx = {
   '& .MuiOutlinedInput-root': {
-    borderRadius: 2,
-    bgcolor: '#FAFAF9',
+    borderRadius: 2, bgcolor: '#FAFAF9',
     '&:hover fieldset': { borderColor: ACCENT },
     '&.Mui-focused fieldset': { borderColor: ACCENT, borderWidth: 1 },
   },
@@ -64,7 +63,9 @@ export default function PersonasPage() {
 
   const [dialogCliente, setDialogCliente] = useState(false);
   const [dialogEmpleado, setDialogEmpleado] = useState(false);
+  const [dialogBaja, setDialogBaja] = useState(false);
   const [personaSeleccionada, setPersonaSeleccionada] = useState<PersonaResponse | null>(null);
+  const [personaADarBaja, setPersonaADarBaja] = useState<PersonaResponse | null>(null);
   const [formCliente, setFormCliente] = useState<ClienteRequest>(emptyCliente);
   const [formEmpleado, setFormEmpleado] = useState<EmpleadoRequest>(emptyEmpleado);
   const [saving, setSaving] = useState(false);
@@ -122,6 +123,11 @@ export default function PersonasPage() {
 
   const abrirCrearEmpleado = () => { setPersonaSeleccionada(null); setFormEmpleado(emptyEmpleado); setDialogEmpleado(true); };
 
+  const abrirBaja = (p: PersonaResponse) => {
+    setPersonaADarBaja(p);
+    setDialogBaja(true);
+  };
+
   const handleGuardarCliente = async () => {
     setSaving(true);
     try {
@@ -152,10 +158,12 @@ export default function PersonasPage() {
     }
   };
 
-  const handleBajaEmpleado = async (id: number) => {
-    if (!confirm('¿Dar de baja a este empleado?')) return;
+  const handleBajaEmpleado = async () => {
+    if (!personaADarBaja) return;
     try {
-      await darBajaEmpleado(id);
+      await darBajaEmpleado(personaADarBaja.id);
+      setDialogBaja(false);
+      setPersonaADarBaja(null);
       cargar();
     } catch {
       setError('Error al dar de baja');
@@ -186,33 +194,18 @@ export default function PersonasPage() {
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button
-            variant="outlined"
-            startIcon={<BadgeOutlinedIcon />}
-            onClick={abrirCrearEmpleado}
-            sx={{
-              borderColor: '#E3E1DB', borderRadius: 2,
-              color: '#3C3B38', fontWeight: 600,
-              '&:hover': { borderColor: ACCENT, color: ACCENT, bgcolor: ACCENT_BG },
-            }}
-          >
+          <Button variant="outlined" startIcon={<BadgeOutlinedIcon />} onClick={abrirCrearEmpleado}
+            sx={{ borderColor: '#E3E1DB', borderRadius: 2, color: '#3C3B38', fontWeight: 600, '&:hover': { borderColor: ACCENT, color: ACCENT, bgcolor: ACCENT_BG } }}>
             Nuevo empleado
           </Button>
-          <Button
-            variant="contained" disableElevation
-            startIcon={<AddIcon />}
-            onClick={abrirCrearCliente}
-            sx={{
-              bgcolor: ACCENT, borderRadius: 2, fontWeight: 600, px: 2.5,
-              '&:hover': { bgcolor: '#2E4A7A' },
-            }}
-          >
+          <Button variant="contained" disableElevation startIcon={<AddIcon />} onClick={abrirCrearCliente}
+            sx={{ bgcolor: ACCENT, borderRadius: 2, fontWeight: 600, px: 2.5, '&:hover': { bgcolor: '#2E4A7A' } }}>
             Nuevo cliente
           </Button>
         </Box>
       </Box>
 
-      {/* Métricas rápidas */}
+      {/* Métricas */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
         {[
           { label: 'Total personas', value: personas.length, icon: <PeopleOutlinedIcon sx={{ fontSize: 18 }} />, color: ACCENT, bg: ACCENT_BG },
@@ -228,48 +221,36 @@ export default function PersonasPage() {
                     {loading ? '...' : m.value}
                   </Typography>
                 </Box>
-                <Box sx={{ bgcolor: m.bg, color: m.color, borderRadius: 2, p: 1, display: 'flex' }}>
-                  {m.icon}
-                </Box>
+                <Box sx={{ bgcolor: m.bg, color: m.color, borderRadius: 2, p: 1, display: 'flex' }}>{m.icon}</Box>
               </Box>
             </Card>
           </Grid>
         ))}
       </Grid>
 
-      {error && <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>{error}</Alert>}
+      {error && <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }} onClose={() => setError(null)}>{error}</Alert>}
 
       {/* Búsqueda */}
       <Box sx={{ display: 'flex', gap: 1.5, mb: 2 }}>
-        <TextField
-          size="small" placeholder="Buscar por nombre, CUIT o DNI..."
+        <TextField size="small" placeholder="Buscar por nombre, CUIT o DNI..."
           value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && cargar()}
           sx={{ flex: 1, ...fieldSx }}
           slotProps={{ input: { startAdornment: <SearchOutlinedIcon sx={{ fontSize: 18, color: '#B4B2A9', mr: 0.5 }} /> } }}
         />
-        <Button
-          variant="outlined" onClick={cargar}
-          sx={{
-            borderColor: '#E3E1DB', borderRadius: 2, color: '#3C3B38', fontWeight: 500, px: 2,
-            '&:hover': { borderColor: ACCENT, color: ACCENT, bgcolor: ACCENT_BG },
-          }}
-        >
+        <Button variant="outlined" onClick={cargar}
+          sx={{ borderColor: '#E3E1DB', borderRadius: 2, color: '#3C3B38', fontWeight: 500, px: 2, '&:hover': { borderColor: ACCENT, color: ACCENT, bgcolor: ACCENT_BG } }}>
           Buscar
         </Button>
       </Box>
 
       {/* Tabs */}
-      <Tabs
-        value={tab}
-        onChange={(_, v) => setTab(v)}
-        sx={{
-          mb: 2,
-          '& .MuiTab-root': { fontSize: '0.9rem', fontWeight: 500, textTransform: 'none', minHeight: 40 },
-          '& .Mui-selected': { color: ACCENT, fontWeight: 700 },
-          '& .MuiTabs-indicator': { bgcolor: ACCENT, height: 3, borderRadius: 2 },
-        }}
-      >
+      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{
+        mb: 2,
+        '& .MuiTab-root': { fontSize: '0.9rem', fontWeight: 500, textTransform: 'none', minHeight: 40 },
+        '& .Mui-selected': { color: ACCENT, fontWeight: 700 },
+        '& .MuiTabs-indicator': { bgcolor: ACCENT, height: 3, borderRadius: 2 },
+      }}>
         <Tab value="todos" label={`Todos (${personas.length})`} />
         <Tab value="clientes" label={`Clientes (${totalClientes})`} />
         <Tab value="empleados" label={`Empleados (${totalEmpleados})`} />
@@ -305,27 +286,17 @@ export default function PersonasPage() {
                 </TableRow>
               ) : (
                 personasFiltradas.map((p) => (
-                  <TableRow key={p.id} sx={{
-                    '&:hover': { bgcolor: '#FAFAF9' },
-                    '& td': { borderBottom: '1px solid #F0EEE8' },
-                  }}>
+                  <TableRow key={p.id} sx={{ '&:hover': { bgcolor: '#FAFAF9' }, '& td': { borderBottom: '1px solid #F0EEE8' } }}>
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                        <Box sx={{
-                          width: 34, height: 34, borderRadius: '50%',
-                          bgcolor: p.esEmpleado ? '#F3E5F5' : ACCENT_BG,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          flexShrink: 0,
-                        }}>
+                        <Box sx={{ width: 34, height: 34, borderRadius: '50%', bgcolor: p.esEmpleado ? '#F3E5F5' : ACCENT_BG, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                           <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: p.esEmpleado ? '#6A1B9A' : ACCENT }}>
                             {p.nombre?.[0]?.toUpperCase()}
                           </Typography>
                         </Box>
                         <Box>
                           <Typography sx={{ fontSize: '0.9rem', fontWeight: 600, color: '#2C2C2A' }}>{p.nombre}</Typography>
-                          {p.razonSocial && (
-                            <Typography sx={{ fontSize: '0.75rem', color: '#B4B2A9' }}>{p.razonSocial}</Typography>
-                          )}
+                          {p.razonSocial && <Typography sx={{ fontSize: '0.75rem', color: '#B4B2A9' }}>{p.razonSocial}</Typography>}
                         </Box>
                       </Box>
                     </TableCell>
@@ -341,15 +312,9 @@ export default function PersonasPage() {
                     </TableCell>
                     <TableCell>
                       <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                        {p.esCliente && (
-                          <Chip label="Cliente" size="small" sx={{ bgcolor: ACCENT_BG, color: ACCENT, fontWeight: 600, fontSize: '0.72rem', height: 20, borderRadius: 1, border: 'none' }} />
-                        )}
-                        {p.esEmpleado && (
-                          <Chip label="Empleado" size="small" sx={{ bgcolor: '#F3E5F5', color: '#6A1B9A', fontWeight: 600, fontSize: '0.72rem', height: 20, borderRadius: 1, border: 'none' }} />
-                        )}
-                        {p.tieneCuentaCorriente && (
-                          <Chip label="CC" size="small" sx={{ bgcolor: '#E8F5E9', color: '#2E7D32', fontWeight: 600, fontSize: '0.72rem', height: 20, borderRadius: 1, border: 'none' }} />
-                        )}
+                        {p.esCliente && <Chip label="Cliente" size="small" sx={{ bgcolor: ACCENT_BG, color: ACCENT, fontWeight: 600, fontSize: '0.72rem', height: 20, borderRadius: 1, border: 'none' }} />}
+                        {p.esEmpleado && <Chip label="Empleado" size="small" sx={{ bgcolor: '#F3E5F5', color: '#6A1B9A', fontWeight: 600, fontSize: '0.72rem', height: 20, borderRadius: 1, border: 'none' }} />}
+                        {p.tieneCuentaCorriente && <Chip label="CC" size="small" sx={{ bgcolor: '#E8F5E9', color: '#2E7D32', fontWeight: 600, fontSize: '0.72rem', height: 20, borderRadius: 1, border: 'none' }} />}
                       </Box>
                     </TableCell>
                     <TableCell>
@@ -364,7 +329,7 @@ export default function PersonasPage() {
                         )}
                         {p.esEmpleado && (
                           <Tooltip title="Dar de baja">
-                            <IconButton size="small" onClick={() => handleBajaEmpleado(p.id)}
+                            <IconButton size="small" onClick={() => abrirBaja(p)}
                               sx={{ color: '#888780', '&:hover': { color: '#C62828', bgcolor: '#FFEBEE' } }}>
                               <PersonOffOutlinedIcon sx={{ fontSize: 16 }} />
                             </IconButton>
@@ -407,8 +372,7 @@ export default function PersonasPage() {
             <Grid size={{ xs: 12 }}>
               <FormControl fullWidth size="small">
                 <InputLabel>Condición IVA *</InputLabel>
-                <Select label="Condición IVA *" value={formCliente.persona.condicionIVA}
-                  sx={{ borderRadius: 2 }}
+                <Select label="Condición IVA *" value={formCliente.persona.condicionIVA} sx={{ borderRadius: 2 }}
                   onChange={(e) => updatePersonaCliente('condicionIVA', e.target.value)}>
                   {CONDICION_IVA_OPTIONS.map(o => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
                 </Select>
@@ -438,13 +402,9 @@ export default function PersonasPage() {
             </Grid>
             <Grid size={{ xs: 12 }}>
               <FormControlLabel
-                control={
-                  <Switch
-                    checked={formCliente.crearCuentaCorriente}
-                    onChange={(e) => setFormCliente((f: ClienteRequest) => ({ ...f, crearCuentaCorriente: e.target.checked }))}
-                    sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: ACCENT }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: ACCENT } }}
-                  />
-                }
+                control={<Switch checked={formCliente.crearCuentaCorriente}
+                  onChange={(e) => setFormCliente((f: ClienteRequest) => ({ ...f, crearCuentaCorriente: e.target.checked }))}
+                  sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: ACCENT }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: ACCENT } }} />}
                 label="Crear cuenta corriente"
               />
             </Grid>
@@ -487,8 +447,7 @@ export default function PersonasPage() {
             <Grid size={{ xs: 12 }}>
               <FormControl fullWidth size="small">
                 <InputLabel>Condición IVA *</InputLabel>
-                <Select label="Condición IVA *" value={formEmpleado.persona.condicionIVA}
-                  sx={{ borderRadius: 2 }}
+                <Select label="Condición IVA *" value={formEmpleado.persona.condicionIVA} sx={{ borderRadius: 2 }}
                   onChange={(e) => updatePersonaEmpleado('condicionIVA', e.target.value)}>
                   {CONDICION_IVA_OPTIONS.map(o => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
                 </Select>
@@ -506,8 +465,7 @@ export default function PersonasPage() {
               <TextField fullWidth size="small" label="Fecha de ingreso *" type="date" sx={fieldSx}
                 value={formEmpleado.fechaIngreso}
                 onChange={(e) => setFormEmpleado((f: EmpleadoRequest) => ({ ...f, fechaIngreso: e.target.value }))}
-                slotProps={{ inputLabel: { shrink: true } }}
-              />
+                slotProps={{ inputLabel: { shrink: true } }} />
             </Grid>
             <Grid size={{ xs: 6 }}>
               <TextField fullWidth size="small" label="Email" value={formEmpleado.persona.email} sx={fieldSx}
@@ -519,13 +477,9 @@ export default function PersonasPage() {
             </Grid>
             <Grid size={{ xs: 12 }}>
               <FormControlLabel
-                control={
-                  <Switch
-                    checked={formEmpleado.crearCuentaCorriente}
-                    onChange={(e) => setFormEmpleado((f: EmpleadoRequest) => ({ ...f, crearCuentaCorriente: e.target.checked }))}
-                    sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: ACCENT }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: ACCENT } }}
-                  />
-                }
+                control={<Switch checked={formEmpleado.crearCuentaCorriente}
+                  onChange={(e) => setFormEmpleado((f: EmpleadoRequest) => ({ ...f, crearCuentaCorriente: e.target.checked }))}
+                  sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: ACCENT }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: ACCENT } }} />}
                 label="Crear cuenta corriente"
               />
             </Grid>
@@ -543,6 +497,31 @@ export default function PersonasPage() {
           <Button variant="contained" disableElevation onClick={handleGuardarEmpleado} disabled={saving}
             sx={{ bgcolor: ACCENT, borderRadius: 2, fontWeight: 600, px: 3, '&:hover': { bgcolor: '#2E4A7A' } }}>
             {saving ? <CircularProgress size={18} color="inherit" /> : 'Guardar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog — Dar de baja */}
+      <Dialog open={dialogBaja} onClose={() => setDialogBaja(false)} maxWidth="xs" fullWidth
+        slotProps={{ paper: { sx: { borderRadius: 3 } } }}>
+        <DialogTitle sx={{ fontWeight: 700, fontSize: '1.1rem', pb: 1 }}>
+          Dar de baja empleado
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, p: 1.5, bgcolor: '#FFEBEE', borderRadius: 2 }}>
+            <PersonOffOutlinedIcon sx={{ color: '#C62828', fontSize: 20, flexShrink: 0, mt: 0.2 }} />
+            <Typography sx={{ fontSize: '0.9rem', color: '#C62828' }}>
+              ¿Dar de baja a <strong>"{personaADarBaja?.nombre}"</strong>? El empleado quedará inactivo en el sistema.
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+          <Button onClick={() => setDialogBaja(false)} sx={{ color: '#888780', borderRadius: 2 }}>
+            Cancelar
+          </Button>
+          <Button variant="contained" disableElevation onClick={handleBajaEmpleado}
+            sx={{ bgcolor: '#C62828', borderRadius: 2, fontWeight: 600, px: 3, '&:hover': { bgcolor: '#B71C1C' } }}>
+            Dar de baja
           </Button>
         </DialogActions>
       </Dialog>
