@@ -1,9 +1,4 @@
-export type CondicionIVA =
-  | 'RESPONSABLE_INSCRIPTO'
-  | 'MONOTRIBUTO'
-  | 'EXENTO'
-  | 'CONSUMIDOR_FINAL'
-  | 'NO_RESPONSABLE';
+export type CondicionIVA = 'RESPONSABLE_INSCRIPTO' | 'MONOTRIBUTISTA' | 'EXENTO' | 'CONSUMIDOR_FINAL' | 'NO_RESPONSABLE' | 'PROVEEDOR_EXTERIOR';
 
 export interface PersonaResponse {
   id: number;

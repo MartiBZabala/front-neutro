@@ -30,10 +30,11 @@ const fieldSx = {
 
 const CONDICION_IVA_OPTIONS: { value: CondicionIVA; label: string }[] = [
   { value: 'RESPONSABLE_INSCRIPTO', label: 'Responsable Inscripto' },
-  { value: 'MONOTRIBUTO', label: 'Monotributo' },
-  { value: 'EXENTO', label: 'Exento' },
-  { value: 'CONSUMIDOR_FINAL', label: 'Consumidor Final' },
-  { value: 'NO_RESPONSABLE', label: 'No Responsable' },
+  { value: 'MONOTRIBUTISTA',        label: 'Monotributista' },
+  { value: 'EXENTO',                label: 'Exento' },
+  { value: 'CONSUMIDOR_FINAL',      label: 'Consumidor Final' },
+  { value: 'NO_RESPONSABLE',        label: 'No Responsable' },
+  { value: 'PROVEEDOR_EXTERIOR',    label: 'Proveedor Exterior' },
 ];
 
 const emptyPersona: PersonaRequest = {

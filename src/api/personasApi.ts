@@ -3,9 +3,24 @@ import type { ClienteRequest, EmpleadoRequest, PersonaResponse } from '../types/
 
 const api = axios.create({ baseURL: import.meta.env.VITE_API_URL ?? 'http://localhost:8080' });
 
+// Interceptor JWT
+api.interceptors.request.use((config) => {
+  const auth = localStorage.getItem('auth-storage');
+  if (auth) {
+    const parsed = JSON.parse(auth);
+    const token = parsed?.state?.user?.token;
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 export const buscarPersonas = (q?: string, page = 0, size = 20) =>
   api.get<{ data: { content: PersonaResponse[]; totalElements: number } }>('/api/personas', {
-    params: { q, page, size },
+    params: {
+      ...(q ? { q } : {}),
+      page,
+      size,
+    },
   });
 
 export const getPersonaById = (id: number) =>
