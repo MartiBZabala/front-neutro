@@ -23,16 +23,17 @@ const ACCENT = '#3B5B8C';
 const ACCENT_BG = '#EEF2F8';
 
 const IVA_OPTIONS = [
-  { value: 'IVA_0', label: '0%' },
-  { value: 'IVA_10_5', label: '10.5%' },
-  { value: 'IVA_21', label: '21%' },
-  { value: 'IVA_27', label: '27%' },
+  { value: 'EXENTO',       label: 'Exento' },
+  { value: 'CERO',         label: '0%' },
+  { value: 'DIEZ_Y_MEDIO', label: '10,5%' },
+  { value: 'VEINTIUNO',    label: '21%' },
+  { value: 'VEINTISIETE',  label: '27%' },
 ];
 
 const emptyForm: ProductoRequest = {
   codigo: '', nombre: '', descripcion: '', categoriaId: undefined,
   precioCosto: 0, precioVenta1: 0, precioVenta2: 0, precioVenta3: 0,
-  alicuotaIVA: 'IVA_21', stockInicial: 0, stockMinimo: 0,
+  alicuotaIVA: 'VEINTIUNO', stockInicial: 0, stockMinimo: 0,
 };
 
 const fieldSx = {

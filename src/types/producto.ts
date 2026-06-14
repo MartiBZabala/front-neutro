@@ -1,4 +1,4 @@
-export type AlicuotaIVA = 'IVA_0' | 'IVA_10_5' | 'IVA_21' | 'IVA_27';
+export type AlicuotaIVA = 'EXENTO' | 'CERO' | 'DIEZ_Y_MEDIO' | 'VEINTIUNO' | 'VEINTISIETE';
 
 export interface ProductoResponse {
   id: number;
