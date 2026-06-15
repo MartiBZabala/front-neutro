@@ -11,8 +11,9 @@ import ReceiptOutlinedIcon from '@mui/icons-material/ReceiptOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
+import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import {
-  listarRechazados, reintentarComprobante, getComprobantePorVenta,
+  listarRechazados, reintentarComprobante, getComprobantePorVenta, descargarYAbrirPdf,
 } from '../../api/facturacionApi';
 import type { ComprobanteResponse, EstadoComprobante } from '../../types/facturacion';
 
@@ -46,6 +47,7 @@ export default function FacturacionPage() {
   const [comprobanteSeleccionado, setComprobanteSeleccionado] = useState<ComprobanteResponse | null>(null);
   const [busquedaVenta, setBusquedaVenta] = useState('');
   const [buscando, setBuscando] = useState(false);
+  const [descargando, setDescargando] = useState<number | null>(null);
 
   useEffect(() => {
     const init = async () => {
@@ -103,6 +105,18 @@ export default function FacturacionPage() {
   const abrirDetalle = (c: ComprobanteResponse) => {
     setComprobanteSeleccionado(c);
     setDialogDetalle(true);
+  };
+
+  const handleDescargarPdf = async (id: number) => {
+    setDescargando(id);
+    setError(null);
+    try {
+      await descargarYAbrirPdf(id);
+    } catch {
+      setError('Error al descargar el PDF del comprobante');
+    } finally {
+      setDescargando(null);
+    }
   };
 
   const comprobantesFiltrados = comprobantes.filter((c) => {
@@ -328,6 +342,21 @@ export default function FacturacionPage() {
                             <ReceiptOutlinedIcon sx={{ fontSize: 16 }} />
                           </IconButton>
                         </Tooltip>
+                        {c.estado === 'AUTORIZADO' && (
+                          <Tooltip title="Descargar PDF">
+                            <IconButton
+                              size="small"
+                              onClick={() => handleDescargarPdf(c.id)}
+                              disabled={descargando === c.id}
+                              sx={{ color: '#888780', '&:hover': { color: ACCENT, bgcolor: ACCENT_BG } }}
+                            >
+                              {descargando === c.id
+                                ? <CircularProgress size={14} />
+                                : <PictureAsPdfOutlinedIcon sx={{ fontSize: 16 }} />
+                              }
+                            </IconButton>
+                          </Tooltip>
+                        )}
                         {c.estado === 'RECHAZADO' && (
                           <Tooltip title="Reintentar">
                             <IconButton
@@ -411,6 +440,19 @@ export default function FacturacionPage() {
           <Button onClick={() => setDialogDetalle(false)} sx={{ color: '#888780', borderRadius: 2 }}>
             Cerrar
           </Button>
+          {comprobanteSeleccionado?.estado === 'AUTORIZADO' && (
+            <Button
+              variant="outlined" disableElevation
+              disabled={descargando === comprobanteSeleccionado?.id}
+              onClick={() => handleDescargarPdf(comprobanteSeleccionado!.id)}
+              startIcon={descargando === comprobanteSeleccionado?.id
+                ? <CircularProgress size={14} />
+                : <PictureAsPdfOutlinedIcon sx={{ fontSize: 18 }} />}
+              sx={{ borderColor: ACCENT, color: ACCENT, borderRadius: 2, fontWeight: 600, '&:hover': { bgcolor: ACCENT_BG, borderColor: ACCENT } }}
+            >
+              Descargar PDF
+            </Button>
+          )}
           {comprobanteSeleccionado?.estado === 'RECHAZADO' && (
             <Button
               variant="contained" disableElevation
