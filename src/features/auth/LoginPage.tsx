@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   Box, TextField, Button, Typography,
   CircularProgress, Alert, IconButton, InputAdornment,
@@ -8,6 +7,7 @@ import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import { useLogin } from './useLogin';
+import { useState } from 'react';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -15,9 +15,10 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const { login, loading, error } = useLogin();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    login(username, password);
+    const ok = await login(username, password);
+    if (!ok) setPassword('');
   };
 
   return (
@@ -172,7 +173,18 @@ export default function LoginPage() {
               variant="contained"
               disabled={loading}
               disableElevation
-              sx={{ py: 1.4, borderRadius: 2, fontSize: 14, fontWeight: 500, mt: 1, letterSpacing: '0.3px' }}
+              sx={{
+                py: 1.4,
+                borderRadius: 2,
+                fontSize: 14,
+                fontWeight: 500,
+                mt: 1,
+                letterSpacing: '0.3px',
+                bgcolor: '#2C2C2A',
+                color: '#fff',
+                '&:hover': { bgcolor: '#3C3B38' },
+                '&.Mui-disabled': { bgcolor: '#E3E1DB', color: '#B4B2A9' },
+              }}
             >
               {loading ? <CircularProgress size={20} color="inherit" /> : 'Ingresar'}
             </Button>

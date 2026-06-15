@@ -1,12 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Box, Card, CardContent, Typography, TextField, Button,
-  Grid, IconButton, Divider, Alert, CircularProgress,
+  Grid, Divider, Alert, CircularProgress,
   Dialog, DialogTitle, DialogContent, DialogActions, Chip,
 } from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
-import RemoveIcon from '@mui/icons-material/Remove';
-import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
 import PrintOutlinedIcon from '@mui/icons-material/PrintOutlined';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import PointOfSaleOutlinedIcon from '@mui/icons-material/PointOfSaleOutlined';
@@ -38,7 +35,7 @@ const MEDIOS: { value: MedioPago; label: string; key: string }[] = [
   { value: 'CUENTA_CORRIENTE', label: 'Cta. Cte.', key: 'F5' },
 ];
 
-type Paso = 'dni' | 'abierta';
+type Paso = 'dni' | 'fondo' | 'abierta';
 
 export default function CajaVentaPage() {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -67,6 +64,8 @@ export default function CajaVentaPage() {
   const [vueltoFinal, setVueltoFinal] = useState(0);
   const [medioFinal, setMedioFinal] = useState<MedioPago>('EFECTIVO');
   const [montoRecibidoFinal, setMontoRecibidoFinal] = useState('');
+  const [fondoInicial, setFondoInicial] = useState('');
+  const [abriendo, setAbriendo] = useState(false);
 
   const total = venta?.total ?? 0;
   const vuelto = medio === 'EFECTIVO' && montoRecibido
@@ -106,9 +105,7 @@ export default function CajaVentaPage() {
       const emp = res.data.data.content.find(p => p.esEmpleado && p.dni === dni);
       if (emp) {
         setEmpleado(emp);
-        // Abrimos el turno automáticamente con fondo 0
-        await abrirCaja(0);
-        setPaso('abierta');
+        setPaso('fondo'); // ← va a pedir fondo
       } else {
         setError('No se encontró un empleado con ese DNI');
       }
@@ -119,47 +116,69 @@ export default function CajaVentaPage() {
     }
   };
 
-  const agregarProducto = useCallback(async (producto: ProductoResponse) => {
-    setSugerencias([]);
-    setCodigo('');
-    setLoading(true);
+  const handleAbrirCaja = async () => {
+    setAbriendo(true);
     setError(null);
     try {
-      let ventaId = venta?.id;
-      if (!ventaId) {
-        const res = await crearVenta();
-        ventaId = res.data.data.id;
-      }
-      const res = await agregarItem(ventaId, { productoId: producto.id, cantidad: 1 });
-      setVenta(res.data.data);
+      await abrirCaja(Number(fondoInicial));
+      setPaso('abierta');
     } catch {
-      setError('Producto no encontrado o sin stock');
+      setError('Error al abrir caja. Verificá que no haya un turno ya abierto.');
     } finally {
-      setLoading(false);
-      focoInput();
-    }
-  }, [venta, focoInput]);
-
-  const handleEnterCodigo = async () => {
-    if (!codigo.trim()) return;
-    setBuscando(true);
-    setError(null);
-    try {
-      const res = await buscarProductos(codigo);
-      const resultados = res.data.data.content;
-      if (resultados.length === 1) {
-        await agregarProducto(resultados[0]);
-      } else if (resultados.length > 1) {
-        setSugerencias(resultados);
-        setIndiceSugerencia(0);
-      } else {
-        setError(`No se encontró producto con código "${codigo}"`);
-        focoInput();
-      }
-    } finally {
-      setBuscando(false);
+      setAbriendo(false);
     }
   };
+
+  const agregarProducto = useCallback(async (producto: ProductoResponse, cantidad = 1) => {
+  setSugerencias([]);
+  setCodigo('');
+  setLoading(true);
+  setError(null);
+  try {
+    let ventaId = venta?.id;
+    if (!ventaId) {
+      const res = await crearVenta();
+      ventaId = res.data.data.id;
+    }
+    const res = await agregarItem(ventaId, { productoId: producto.id, cantidad });
+    setVenta(res.data.data);
+  } catch {
+    setError('Producto no encontrado o sin stock');
+  } finally {
+    setLoading(false);
+    focoInput();
+  }
+}, [venta, focoInput]);
+
+  const handleEnterCodigo = async () => {
+  if (!codigo.trim()) return;
+  setBuscando(true);
+  setError(null);
+  try {
+    let cantidadSolicitada = 1;
+    let codigoBusqueda = codigo.trim();
+
+    if (codigo.includes('*')) {
+      const [cantStr, cod] = codigo.split('*');
+      cantidadSolicitada = parseInt(cantStr) || 1;
+      codigoBusqueda = cod.trim();
+    }
+
+    const res = await buscarProductos(codigoBusqueda);
+    const resultados = res.data.data.content;
+    if (resultados.length === 1) {
+      await agregarProducto(resultados[0], cantidadSolicitada);
+    } else if (resultados.length > 1) {
+      setSugerencias(resultados);
+      setIndiceSugerencia(0);
+    } else {
+      setError(`No se encontró producto con código "${codigoBusqueda}"`);
+      focoInput();
+    }
+  } finally {
+    setBuscando(false);
+  }
+};
 
   const handleKeyDownCodigo = async (e: React.KeyboardEvent) => {
     if (sugerencias.length > 0) {
@@ -267,7 +286,70 @@ export default function CajaVentaPage() {
       </Box>
     );
   }
+  if (paso === 'fondo') {
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '80vh' }}>
+        <Box sx={{ width: 420 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
+            <Box sx={{ width: 40, height: 40, borderRadius: 2, bgcolor: ACCENT, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <PointOfSaleOutlinedIcon sx={{ fontSize: 20, color: '#fff' }} />
+            </Box>
+            <Box>
+              <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', color: '#2C2C2A', lineHeight: 1 }}>Abrir caja</Typography>
+              <Typography sx={{ fontSize: '0.82rem', color: '#888780' }}>Ingresá el fondo inicial del turno</Typography>
+            </Box>
+          </Box>
 
+          <Card elevation={0} sx={{ border: '1px solid #E3E1DB', borderRadius: 3 }}>
+            <CardContent sx={{ p: 3 }}>
+              {/* Empleado */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5, p: 1.5, bgcolor: ACCENT_BG, borderRadius: 2 }}>
+                <Box sx={{ width: 36, height: 36, borderRadius: '50%', bgcolor: ACCENT, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Typography sx={{ fontSize: '0.9rem', fontWeight: 700, color: '#fff' }}>
+                    {empleado?.nombre?.[0] ?? '?'}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', color: '#2C2C2A' }}>{empleado?.nombre}</Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: '#888780' }}>DNI {empleado?.dni}</Typography>
+                </Box>
+              </Box>
+
+              {error && (
+                <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }} onClose={() => setError(null)}>{error}</Alert>
+              )}
+
+              <TextField
+                label="Fondo inicial ($)"
+                type="number"
+                fullWidth size="small"
+                value={fondoInicial}
+                onChange={(e) => setFondoInicial(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && fondoInicial && void handleAbrirCaja()}
+                autoFocus
+                sx={{ mb: 2, ...fieldSx }}
+              />
+              <Button
+                fullWidth variant="contained" disableElevation
+                disabled={abriendo || !fondoInicial}
+                onClick={() => void handleAbrirCaja()}
+                sx={{ py: 1.3, borderRadius: 2, bgcolor: ACCENT, fontWeight: 600, '&:hover': { bgcolor: '#2E4A7A' } }}
+              >
+                {abriendo
+                  ? <CircularProgress size={20} color="inherit" />
+                  : 'Abrir turno — Enter ↵'
+                }
+              </Button>
+              <Button fullWidth onClick={() => { setPaso('dni'); setDni(''); setEmpleado(null); setError(null); }}
+                sx={{ mt: 1, color: '#888780', borderRadius: 2 }}>
+                ← Volver
+              </Button>
+            </CardContent>
+          </Card>
+        </Box>
+      </Box>
+    );
+  }
   // ─── Cobro ──────────────────────────────────────────────────
   return (
     <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 2, height: '100%' }}>
@@ -352,36 +434,24 @@ export default function CajaVentaPage() {
             </Box>
           ) : (
             venta.items.map((item) => (
-              <Box key={item.id} sx={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                py: 1.2, borderBottom: '1px solid #F0EEE8',
-                '&:hover': { bgcolor: '#FAFAF9' },
-              }}>
-                <Box sx={{ flex: 1 }}>
-                  <Typography sx={{ fontSize: '0.9rem', fontWeight: 500, color: '#2C2C2A' }}>{item.nombreProducto}</Typography>
-                  <Typography sx={{ fontSize: '0.75rem', color: '#B4B2A9' }}>
-                    ${item.precioUnitario?.toLocaleString('es-AR')} c/u
-                  </Typography>
-                </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <IconButton size="small" sx={{ border: '1px solid #E3E1DB', borderRadius: 1.5, p: 0.3, '&:hover': { bgcolor: ACCENT_BG, borderColor: ACCENT } }}>
-                    <RemoveIcon sx={{ fontSize: 14 }} />
-                  </IconButton>
-                  <Typography sx={{ mx: 1, minWidth: 24, textAlign: 'center', fontWeight: 600, fontSize: '0.9rem', color: '#2C2C2A' }}>
-                    {item.cantidad}
-                  </Typography>
-                  <IconButton size="small" sx={{ border: '1px solid #E3E1DB', borderRadius: 1.5, p: 0.3, '&:hover': { bgcolor: ACCENT_BG, borderColor: ACCENT } }}>
-                    <AddIcon sx={{ fontSize: 14 }} />
-                  </IconButton>
-                  <Typography sx={{ fontWeight: 700, ml: 1.5, minWidth: 72, textAlign: 'right', fontSize: '0.9rem', color: '#2C2C2A' }}>
-                    ${item.subtotal?.toLocaleString('es-AR')}
-                  </Typography>
-                  <IconButton size="small" sx={{ ml: 0.5, color: '#D3D1C7', '&:hover': { color: '#C62828', bgcolor: '#FFEBEE' } }}>
-                    <DeleteOutlinedIcon sx={{ fontSize: 16 }} />
-                  </IconButton>
-                </Box>
-              </Box>
-            ))
+  <Box key={item.id} sx={{
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    py: 1.2, borderBottom: '1px solid #F0EEE8',
+    '&:hover': { bgcolor: '#FAFAF9' },
+  }}>
+    <Box sx={{ flex: 1 }}>
+      <Typography sx={{ fontSize: '0.9rem', fontWeight: 500, color: '#2C2C2A' }}>
+        {item.nombreProducto}
+      </Typography>
+      <Typography sx={{ fontSize: '0.75rem', color: '#B4B2A9' }}>
+        {item.cantidad} × ${item.precioUnitario?.toLocaleString('es-AR')}
+      </Typography>
+    </Box>
+    <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', color: '#2C2C2A', minWidth: 72, textAlign: 'right' }}>
+      ${item.subtotal?.toLocaleString('es-AR')}
+    </Typography>
+  </Box>
+))
           )}
         </CardContent>
       </Card>

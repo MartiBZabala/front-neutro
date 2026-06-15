@@ -5,6 +5,16 @@ const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
 
 const api = axios.create({ baseURL: API_BASE });
 
+api.interceptors.request.use((config) => {
+  const auth = localStorage.getItem('auth-storage');
+  if (auth) {
+    const parsed = JSON.parse(auth);
+    const token = parsed?.state?.user?.token;
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 export const abrirCaja = (fondoInicial: number) =>
   api.post<{ data: TurnoCajaResponse }>('/api/caja/abrir', null, { params: { fondoInicial } });
 

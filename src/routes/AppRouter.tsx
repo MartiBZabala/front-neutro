@@ -17,7 +17,7 @@ import CajaVentaLayout from '../components/layout/CajaVentaLayout';
 function RoleRouter() {
   const user = useAuthStore((s) => s.user);
   if (!user) return <Navigate to="/login" replace />;
-  if (user.rol === 'CAJERO') return <Navigate to="/cobro" replace />;
+  if (user.rol === 'CAJERO') return <Navigate to="/caja" replace />;
   return <Navigate to="/dashboard" replace />;
 }
 
