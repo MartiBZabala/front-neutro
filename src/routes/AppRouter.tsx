@@ -2,7 +2,6 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from '../features/auth/LoginPage';
 import MainLayout from '../components/layout/MainLayout';
 import DashboardPage from '../features/dashboard/DashboardPage';
-import CajaPage from '../features/caja/CajaPage';
 import CajaVentaPage from '../features/caja/CajaVentaPage';
 import VentasPage from '../features/ventas/VentasPage';
 import ProductosPage from '../features/productos/ProductosPage';
@@ -31,7 +30,6 @@ export default function AppRouter() {
         {/* Rutas ADMIN — con sidebar completo */}
         <Route element={<PrivateRoute><MainLayout /></PrivateRoute>}>
           <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/caja" element={<CajaPage />} />
           <Route path="/ventas" element={<VentasPage />} />
           <Route path="/productos" element={<ProductosPage />} />
           <Route path="/personas" element={<PersonasPage />} />
@@ -43,7 +41,7 @@ export default function AppRouter() {
 
         {/* Rutas CAJERO — sin sidebar, pantalla completa */}
         <Route element={<PrivateRoute><CajaVentaLayout /></PrivateRoute>}>
-          <Route path="/cobro" element={<CajaVentaPage />} />
+          <Route path="/caja" element={<CajaVentaPage />} />
         </Route>
 
         <Route path="/" element={<RoleRouter />} />

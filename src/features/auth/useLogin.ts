@@ -40,17 +40,20 @@ export const useLogin = () => {
       // Guardamos el refreshToken para renovar sesión más adelante
       localStorage.setItem('refreshToken', data.refreshToken);
 
-      navigate(rol === 'CAJERO' ? '/cobro' : '/dashboard');
+      navigate(rol === 'CAJERO' ? '/caja' : '/dashboard');
 
     } catch (err) {
       if (axios.isAxiosError(err)) {
-        const msg = err.response?.data?.message ?? err.response?.data?.error;
-        setError(msg ?? 'Usuario o contraseña incorrectos');
+        console.log('Login error:', err.response?.data);
+        console.log('Login error detail:', JSON.stringify(err.response?.data, null, 2));
+        const errorData = err.response?.data?.error;
+        const msg = typeof errorData === 'string'
+          ? errorData
+          : errorData?.message ?? err.response?.data?.message ?? 'Usuario o contraseña incorrectos';
+        setError(msg);
       } else {
         setError('Error de conexión con el servidor');
       }
-    } finally {
-      setLoading(false);
     }
   };
 
