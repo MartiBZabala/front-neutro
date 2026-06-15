@@ -18,6 +18,12 @@ api.interceptors.request.use((config) => {
 export const abrirCaja = (fondoInicial: number) =>
   api.post<{ data: TurnoCajaResponse }>('/api/caja/abrir', null, { params: { fondoInicial } });
 
+/**
+ * Devuelve el turno ABIERTO del usuario actual, o null si no tiene ninguno.
+ */
+export const miTurnoActual = () =>
+  api.get<{ data: TurnoCajaResponse | null }>('/api/caja/mi-turno');
+
 export const iniciarArqueo = (id: number, req: ArqueoRequest) =>
   api.post<{ data: TurnoCajaResponse }>(`/api/caja/${id}/arqueo`, req);
 

@@ -14,7 +14,7 @@ import type { VentaResponse } from '../../types/venta';
 import type { MedioPago } from '../../types/medioPago';
 import type { PersonaResponse } from '../../types/personas';
 import { buscarPersonas } from '../../api/personasApi';
-import { abrirCaja } from '../../api/cajaApi';
+import { abrirCaja, miTurnoActual } from '../../api/cajaApi';
 
 const ACCENT = '#3B5B8C';
 const ACCENT_BG = '#EEF2F8';
@@ -66,6 +66,8 @@ export default function CajaVentaPage() {
   const [montoRecibidoFinal, setMontoRecibidoFinal] = useState('');
   const [fondoInicial, setFondoInicial] = useState('');
   const [abriendo, setAbriendo] = useState(false);
+  const [cajeroNombre, setCajeroNombre] = useState('');
+  const [verificandoTurno, setVerificandoTurno] = useState(true);
 
   const total = venta?.total ?? 0;
   const vuelto = medio === 'EFECTIVO' && montoRecibido
@@ -80,6 +82,28 @@ export default function CajaVentaPage() {
   useEffect(() => {
     if (paso === 'abierta') focoInput();
   }, [paso, focoInput]);
+
+  // Al montar, verificar si el usuario ya tiene un turno ABIERTO.
+  // Si lo tiene, saltar directo al paso 'abierta' en lugar de pedir
+  // DNI/fondo y terminar disparando el 422 "Ya tenés un turno abierto".
+  useEffect(() => {
+    let activo = true;
+    (async () => {
+      try {
+        const res = await miTurnoActual();
+        const turno = res.data.data;
+        if (activo && turno) {
+          setCajeroNombre(turno.nombreUsuario);
+          setPaso('abierta');
+        }
+      } catch {
+        // si falla la verificación, seguimos con el flujo normal de DNI
+      } finally {
+        if (activo) setVerificandoTurno(false);
+      }
+    })();
+    return () => { activo = false; };
+  }, []);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -228,6 +252,15 @@ export default function CajaVentaPage() {
     focoInput();
   };
 
+  // ─── Verificando si ya hay un turno abierto ──────────────────
+  if (verificandoTurno) {
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '80vh' }}>
+        <CircularProgress sx={{ color: ACCENT }} />
+      </Box>
+    );
+  }
+
   // ─── Paso DNI ───────────────────────────────────────────────
   if (paso === 'dni') {
     return (
@@ -362,7 +395,7 @@ export default function CajaVentaPage() {
             <Box>
               <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#2C2C2A' }}>Productos</Typography>
               <Typography sx={{ fontSize: '0.8rem', color: '#888780', mt: 0.25 }}>
-                Cajero: <strong style={{ color: ACCENT }}>{empleado?.nombre}</strong>
+                Cajero: <strong style={{ color: ACCENT }}>{empleado?.nombre ?? cajeroNombre}</strong>
               </Typography>
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -579,7 +612,7 @@ export default function CajaVentaPage() {
               <Typography sx={{ fontSize: 11, fontFamily: 'monospace' }}>
                 Venta #{ventaCobrada.id} · {new Date(ventaCobrada.fechaHora).toLocaleString('es-AR')}
               </Typography>
-              <Typography sx={{ fontSize: 11, fontFamily: 'monospace' }}>Cajero: {empleado?.nombre}</Typography>
+              <Typography sx={{ fontSize: 11, fontFamily: 'monospace' }}>Cajero: {empleado?.nombre ?? cajeroNombre}</Typography>
               <Typography sx={{ fontSize: 11, color: '#B4B2A9', fontFamily: 'monospace', mb: 1 }}>
                 Cliente: {ventaCobrada.nombrePersona ?? 'Consumidor final'}
               </Typography>
