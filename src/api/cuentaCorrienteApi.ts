@@ -3,6 +3,16 @@ import type { CCResponse, MovimientoResponse, PagoRequest, AjusteRequest } from 
 
 const api = axios.create({ baseURL: import.meta.env.VITE_API_URL ?? 'http://localhost:8080' });
 
+api.interceptors.request.use((config) => {
+  const auth = localStorage.getItem('auth-storage');
+  if (auth) {
+    const parsed = JSON.parse(auth);
+    const token = parsed?.state?.user?.token;
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 export const getCCPorPersona = (personaId: number) =>
   api.get<{ data: CCResponse }>(`/api/cuentas-corrientes/${personaId}`);
 

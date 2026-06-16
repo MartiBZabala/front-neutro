@@ -17,9 +17,9 @@ const ACCENT_BG = '#EEF2F8';
 
 const quickAccess = [
   { label: 'Productos', path: '/productos', icon: <InventoryOutlinedIcon sx={{ fontSize: 20 }} /> },
-  { label: 'Personas',  path: '/personas',  icon: <PeopleOutlinedIcon sx={{ fontSize: 20 }} /> },
-  { label: 'Ventas',    path: '/ventas',    icon: <ReceiptOutlinedIcon sx={{ fontSize: 20 }} /> },
-  { label: 'Reportes',  path: '/reportes',  icon: <BarChartOutlinedIcon sx={{ fontSize: 20 }} /> },
+  { label: 'Personas', path: '/personas', icon: <PeopleOutlinedIcon sx={{ fontSize: 20 }} /> },
+  { label: 'Ventas', path: '/ventas', icon: <ReceiptOutlinedIcon sx={{ fontSize: 20 }} /> },
+  { label: 'Reportes', path: '/reportes', icon: <BarChartOutlinedIcon sx={{ fontSize: 20 }} /> },
 ];
 
 export default function DashboardPage() {
@@ -27,23 +27,29 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [ventasHoy, setVentasHoy] = useState<VentaResponse[]>([]);
   const [stockBajo, setStockBajo] = useState(0);
+  
 
   useEffect(() => {
-    const hoy = new Date().toISOString().split('T')[0];
-    void Promise.all([
-      listarVentas(`${hoy}T00:00:00`, `${hoy}T23:59:59`, 0, 100),
-      listarProductos(undefined, undefined, 0, 200),
-    ]).then(([ventasRes, prodRes]) => {
-      setVentasHoy(ventasRes.data.data.content);
-      setStockBajo(prodRes.data.data.content.filter((p) => p.stockBajo).length);
-    }).finally(() => setLoading(false));
-  }, []);
+  const ahora = new Date();
+  const offset = ahora.getTimezoneOffset() * 60000;
+  const local = new Date(ahora.getTime() - offset);
+  const hoy = local.toISOString().split('T')[0];
+  
+  void Promise.all([
+    listarVentas(`${hoy}T07:30:00`, `${hoy}T23:59:59`, 0, 100),
+    listarProductos(undefined, undefined, 0, 200),
+  ]).then(([ventasRes, prodRes]) => {
+    setVentasHoy(ventasRes.data.data.content);
+    setStockBajo(prodRes.data.data.content.filter((p) => p.stockBajo).length);
+  }).finally(() => setLoading(false));
+}, []);
 
   const ventasCobradas = ventasHoy.filter(v => v.estado === 'PAGADA');
   const totalHoy = ventasCobradas.reduce((acc, v) => acc + Number(v.total ?? 0), 0);
   const ultimasVentas = [...ventasHoy]
     .sort((a, b) => new Date(b.fechaHora).getTime() - new Date(a.fechaHora).getTime())
     .slice(0, 5);
+
 
   const metrics = [
     {

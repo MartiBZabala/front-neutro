@@ -9,12 +9,14 @@ import {
 } from '@mui/material';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import PersonOffOutlinedIcon from '@mui/icons-material/PersonOffOutlined';
+import PersonAddOutlinedIcon from '@mui/icons-material/PersonAddOutlined';
+import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined';
 import AddIcon from '@mui/icons-material/Add';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import BadgeOutlinedIcon from '@mui/icons-material/BadgeOutlined';
 import type { ClienteRequest, CondicionIVA, EmpleadoRequest, PersonaRequest, PersonaResponse } from '../../types/personas';
-import { buscarPersonas, crearCliente, crearEmpleado, darBajaEmpleado, editarCliente } from '../../api/personasApi';
+import { buscarPersonas, crearCliente, crearEmpleado, darBajaPersona, editarCliente, editarEmpleado, agregarRolCliente, crearCuentaCorriente } from '../../api/personasApi';
 
 const ACCENT = '#3B5B8C';
 const ACCENT_BG = '#EEF2F8';
@@ -64,26 +66,23 @@ export default function PersonasPage() {
   const [dialogCliente, setDialogCliente] = useState(false);
   const [dialogEmpleado, setDialogEmpleado] = useState(false);
   const [dialogBaja, setDialogBaja] = useState(false);
+  const [dialogAgregarCliente, setDialogAgregarCliente] = useState(false);
+  const [dialogCC, setDialogCC] = useState(false);
+
   const [personaSeleccionada, setPersonaSeleccionada] = useState<PersonaResponse | null>(null);
   const [personaADarBaja, setPersonaADarBaja] = useState<PersonaResponse | null>(null);
+  const [personaAgregarCliente, setPersonaAgregarCliente] = useState<PersonaResponse | null>(null);
+  const [personaCC, setPersonaCC] = useState<PersonaResponse | null>(null);
+
   const [formCliente, setFormCliente] = useState<ClienteRequest>(emptyCliente);
   const [formEmpleado, setFormEmpleado] = useState<EmpleadoRequest>(emptyEmpleado);
-  const [saving, setSaving] = useState(false);
+  const [formAgregarCliente, setFormAgregarCliente] = useState<ClienteRequest>(emptyCliente);
+  const [limiteCC, setLimiteCC] = useState('0');
 
-  useEffect(() => {
-    const init = async () => {
-      setLoading(true);
-      try {
-        const res = await buscarPersonas();
-        setPersonas(res.data.data.content);
-      } catch {
-        setError('Error al cargar personas');
-      } finally {
-        setLoading(false);
-      }
-    };
-    init();
-  }, []);
+  const [saving, setSaving] = useState(false);
+  const [savingCC, setSavingCC] = useState(false);
+
+  useEffect(() => { void cargar(); }, []);
 
   const cargar = async () => {
     setLoading(true);
@@ -92,7 +91,7 @@ export default function PersonasPage() {
       const res = await buscarPersonas(busqueda || undefined);
       setPersonas(res.data.data.content);
     } catch {
-      setError('Error al buscar');
+      setError('Error al cargar personas');
     } finally {
       setLoading(false);
     }
@@ -112,71 +111,111 @@ export default function PersonasPage() {
       persona: {
         nombre: p.nombre, razonSocial: p.razonSocial ?? '',
         cuit: p.cuit ?? '', dni: p.dni ?? '',
-        condicionIVA: p.condicionIVA, domicilio: p.domicilio ?? '',
-        email: p.email ?? '', telefono: p.telefono ?? '',
+        condicionIVA: p.condicionIVA,
+        domicilio: p.domicilio ?? '', email: p.email ?? '', telefono: p.telefono ?? '',
       },
-      listaPrecios: 1, descuentoHabitual: 0,
-      crearCuentaCorriente: false, limiteCredito: 0,
+      listaPrecios: 1, descuentoHabitual: 0, crearCuentaCorriente: false, limiteCredito: 0,
     });
     setDialogCliente(true);
   };
 
   const abrirCrearEmpleado = () => { setPersonaSeleccionada(null); setFormEmpleado(emptyEmpleado); setDialogEmpleado(true); };
 
-  const abrirBaja = (p: PersonaResponse) => {
-    setPersonaADarBaja(p);
-    setDialogBaja(true);
+  const abrirEditarEmpleado = (p: PersonaResponse) => {
+    setPersonaSeleccionada(p);
+    setFormEmpleado({
+      persona: {
+        nombre: p.nombre, razonSocial: p.razonSocial ?? '',
+        cuit: p.cuit ?? '', dni: p.dni ?? '',
+        condicionIVA: p.condicionIVA,
+        domicilio: p.domicilio ?? '', email: p.email ?? '', telefono: p.telefono ?? '',
+      },
+      legajo: '', cargo: '',
+      fechaIngreso: new Date().toISOString().split('T')[0],
+      crearCuentaCorriente: false, limiteCredito: 0,
+    });
+    setDialogEmpleado(true);
   };
+
+  const abrirBaja = (p: PersonaResponse) => { setPersonaADarBaja(p); setDialogBaja(true); };
+
+  const abrirAgregarCliente = (p: PersonaResponse) => {
+    setPersonaAgregarCliente(p);
+    setFormAgregarCliente({
+      persona: {
+        nombre: p.nombre, razonSocial: p.razonSocial ?? '',
+        cuit: p.cuit ?? '', dni: p.dni ?? '',
+        condicionIVA: p.condicionIVA,
+        domicilio: p.domicilio ?? '', email: p.email ?? '', telefono: p.telefono ?? '',
+      },
+      listaPrecios: 1, descuentoHabitual: 0, crearCuentaCorriente: false, limiteCredito: 0,
+    });
+    setDialogAgregarCliente(true);
+  };
+
+  const abrirCrearCC = (p: PersonaResponse) => { setPersonaCC(p); setLimiteCC('0'); setDialogCC(true); };
 
   const handleGuardarCliente = async () => {
     setSaving(true);
     try {
-      if (personaSeleccionada) {
-        await editarCliente(personaSeleccionada.id, formCliente);
-      } else {
-        await crearCliente(formCliente);
-      }
+      if (personaSeleccionada) { await editarCliente(personaSeleccionada.id, formCliente); }
+      else { await crearCliente(formCliente); }
       setDialogCliente(false);
-      cargar();
-    } catch {
-      setError('Error al guardar cliente');
-    } finally {
-      setSaving(false);
-    }
+      void cargar();
+    } catch { setError('Error al guardar cliente'); }
+    finally { setSaving(false); }
   };
 
   const handleGuardarEmpleado = async () => {
     setSaving(true);
     try {
-      await crearEmpleado(formEmpleado);
+      if (personaSeleccionada) { await editarEmpleado(personaSeleccionada.id, formEmpleado); }
+      else { await crearEmpleado(formEmpleado); }
       setDialogEmpleado(false);
-      cargar();
-    } catch {
-      setError('Error al guardar empleado');
-    } finally {
-      setSaving(false);
-    }
+      void cargar();
+    } catch { setError('Error al guardar empleado'); }
+    finally { setSaving(false); }
   };
 
-  const handleBajaEmpleado = async () => {
+  const handleBajaPersona = async () => {
     if (!personaADarBaja) return;
     try {
-      await darBajaEmpleado(personaADarBaja.id);
+      await darBajaPersona(personaADarBaja.id);
       setDialogBaja(false);
       setPersonaADarBaja(null);
-      cargar();
-    } catch {
-      setError('Error al dar de baja');
-    }
+      void cargar();
+    } catch { setError('Error al dar de baja'); }
   };
 
-  const updatePersonaCliente = (field: keyof PersonaRequest, value: string) => {
-    setFormCliente((f: ClienteRequest) => ({ ...f, persona: { ...f.persona, [field]: value } }));
+  const handleAgregarCliente = async () => {
+    if (!personaAgregarCliente) return;
+    setSaving(true);
+    try {
+      await agregarRolCliente(personaAgregarCliente.id, formAgregarCliente);
+      setDialogAgregarCliente(false);
+      setPersonaAgregarCliente(null);
+      void cargar();
+    } catch { setError('Error al agregar rol cliente'); }
+    finally { setSaving(false); }
   };
 
-  const updatePersonaEmpleado = (field: keyof PersonaRequest, value: string) => {
-    setFormEmpleado((f: EmpleadoRequest) => ({ ...f, persona: { ...f.persona, [field]: value } }));
+  const handleCrearCC = async () => {
+    if (!personaCC) return;
+    setSavingCC(true);
+    try {
+      await crearCuentaCorriente(personaCC.id, Number(limiteCC));
+      setDialogCC(false);
+      setPersonaCC(null);
+      void cargar();
+    } catch { setError('Error al crear cuenta corriente'); }
+    finally { setSavingCC(false); }
   };
+
+  const updatePersonaCliente = (field: keyof PersonaRequest, value: string) =>
+    setFormCliente((f) => ({ ...f, persona: { ...f.persona, [field]: value } }));
+
+  const updatePersonaEmpleado = (field: keyof PersonaRequest, value: string) =>
+    setFormEmpleado((f) => ({ ...f, persona: { ...f.persona, [field]: value } }));
 
   const totalClientes = personas.filter(p => p.esCliente).length;
   const totalEmpleados = personas.filter(p => p.esEmpleado).length;
@@ -186,12 +225,8 @@ export default function PersonasPage() {
       {/* Encabezado */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
         <Box>
-          <Typography sx={{ fontSize: '1.4rem', fontWeight: 700, color: '#2C2C2A', letterSpacing: '-0.3px' }}>
-            Personas
-          </Typography>
-          <Typography variant="body2" sx={{ color: '#888780', mt: 0.5 }}>
-            Clientes y empleados del negocio
-          </Typography>
+          <Typography sx={{ fontSize: '1.4rem', fontWeight: 700, color: '#2C2C2A', letterSpacing: '-0.3px' }}>Personas</Typography>
+          <Typography variant="body2" sx={{ color: '#888780', mt: 0.5 }}>Clientes y empleados del negocio</Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button variant="outlined" startIcon={<BadgeOutlinedIcon />} onClick={abrirCrearEmpleado}
@@ -234,11 +269,11 @@ export default function PersonasPage() {
       <Box sx={{ display: 'flex', gap: 1.5, mb: 2 }}>
         <TextField size="small" placeholder="Buscar por nombre, CUIT o DNI..."
           value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && cargar()}
+          onKeyDown={(e) => e.key === 'Enter' && void cargar()}
           sx={{ flex: 1, ...fieldSx }}
           slotProps={{ input: { startAdornment: <SearchOutlinedIcon sx={{ fontSize: 18, color: '#B4B2A9', mr: 0.5 }} /> } }}
         />
-        <Button variant="outlined" onClick={cargar}
+        <Button variant="outlined" onClick={() => void cargar()}
           sx={{ borderColor: '#E3E1DB', borderRadius: 2, color: '#3C3B38', fontWeight: 500, px: 2, '&:hover': { borderColor: ACCENT, color: ACCENT, bgcolor: ACCENT_BG } }}>
           Buscar
         </Button>
@@ -268,9 +303,7 @@ export default function PersonasPage() {
             <TableHead>
               <TableRow sx={{ bgcolor: '#F4F3F1' }}>
                 {['Nombre', 'CUIT / DNI', 'Contacto', 'Roles', 'Acciones'].map((col) => (
-                  <TableCell key={col} sx={{ fontWeight: 700, color: '#888780', fontSize: '0.8rem', letterSpacing: '0.3px', py: 1.5 }}>
-                    {col}
-                  </TableCell>
+                  <TableCell key={col} sx={{ fontWeight: 700, color: '#888780', fontSize: '0.8rem', letterSpacing: '0.3px', py: 1.5 }}>{col}</TableCell>
                 ))}
               </TableRow>
             </TableHead>
@@ -284,70 +317,91 @@ export default function PersonasPage() {
                     </Box>
                   </TableCell>
                 </TableRow>
-              ) : (
-                personasFiltradas.map((p) => (
-                  <TableRow key={p.id} sx={{ '&:hover': { bgcolor: '#FAFAF9' }, '& td': { borderBottom: '1px solid #F0EEE8' } }}>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                        <Box sx={{ width: 34, height: 34, borderRadius: '50%', bgcolor: p.esEmpleado ? '#F3E5F5' : ACCENT_BG, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: p.esEmpleado ? '#6A1B9A' : ACCENT }}>
-                            {p.nombre?.[0]?.toUpperCase()}
-                          </Typography>
-                        </Box>
-                        <Box>
-                          <Typography sx={{ fontSize: '0.9rem', fontWeight: 600, color: '#2C2C2A' }}>{p.nombre}</Typography>
-                          {p.razonSocial && <Typography sx={{ fontSize: '0.75rem', color: '#B4B2A9' }}>{p.razonSocial}</Typography>}
-                        </Box>
+              ) : personasFiltradas.map((p) => (
+                <TableRow key={p.id} sx={{ '&:hover': { bgcolor: '#FAFAF9' }, '& td': { borderBottom: '1px solid #F0EEE8' } }}>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                      <Box sx={{ width: 34, height: 34, borderRadius: '50%', bgcolor: p.esEmpleado ? '#F3E5F5' : ACCENT_BG, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: p.esEmpleado ? '#6A1B9A' : ACCENT }}>
+                          {p.nombre?.[0]?.toUpperCase()}
+                        </Typography>
                       </Box>
-                    </TableCell>
-                    <TableCell>
-                      <Typography sx={{ fontSize: '0.85rem', color: '#5F5E5A', fontFamily: 'monospace' }}>
-                        {p.cuit ? `CUIT ${p.cuit}` : p.dni ? `DNI ${p.dni}` : '—'}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography sx={{ fontSize: '0.85rem', color: '#888780' }}>
-                        {p.email ?? p.telefono ?? '—'}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                        {p.esCliente && <Chip label="Cliente" size="small" sx={{ bgcolor: ACCENT_BG, color: ACCENT, fontWeight: 600, fontSize: '0.72rem', height: 20, borderRadius: 1, border: 'none' }} />}
-                        {p.esEmpleado && <Chip label="Empleado" size="small" sx={{ bgcolor: '#F3E5F5', color: '#6A1B9A', fontWeight: 600, fontSize: '0.72rem', height: 20, borderRadius: 1, border: 'none' }} />}
-                        {p.tieneCuentaCorriente && <Chip label="CC" size="small" sx={{ bgcolor: '#E8F5E9', color: '#2E7D32', fontWeight: 600, fontSize: '0.72rem', height: 20, borderRadius: 1, border: 'none' }} />}
+                      <Box>
+                        <Typography sx={{ fontSize: '0.9rem', fontWeight: 600, color: '#2C2C2A' }}>{p.nombre}</Typography>
+                        {p.razonSocial && <Typography sx={{ fontSize: '0.75rem', color: '#B4B2A9' }}>{p.razonSocial}</Typography>}
                       </Box>
-                    </TableCell>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', gap: 0.5 }}>
-                        {p.esCliente && (
-                          <Tooltip title="Editar">
-                            <IconButton size="small" onClick={() => abrirEditarCliente(p)}
+                    </Box>
+                  </TableCell>
+                  <TableCell>
+                    <Typography sx={{ fontSize: '0.85rem', color: '#5F5E5A', fontFamily: 'monospace' }}>
+                      {p.cuit ? `CUIT ${p.cuit}` : p.dni ? `DNI ${p.dni}` : '—'}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography sx={{ fontSize: '0.85rem', color: '#888780' }}>{p.email ?? p.telefono ?? '—'}</Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                      {p.esCliente && <Chip label="Cliente" size="small" sx={{ bgcolor: ACCENT_BG, color: ACCENT, fontWeight: 600, fontSize: '0.72rem', height: 20, borderRadius: 1, border: 'none' }} />}
+                      {p.esEmpleado && <Chip label="Empleado" size="small" sx={{ bgcolor: '#F3E5F5', color: '#6A1B9A', fontWeight: 600, fontSize: '0.72rem', height: 20, borderRadius: 1, border: 'none' }} />}
+                      {p.tieneCuentaCorriente && <Chip label="CC" size="small" sx={{ bgcolor: '#E8F5E9', color: '#2E7D32', fontWeight: 600, fontSize: '0.72rem', height: 20, borderRadius: 1, border: 'none' }} />}
+                    </Box>
+                  </TableCell>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', gap: 0.5 }}>
+                      {p.esCliente && (
+                        <Tooltip title="Editar cliente">
+                          <IconButton size="small" onClick={() => abrirEditarCliente(p)}
+                            sx={{ color: '#888780', '&:hover': { color: ACCENT, bgcolor: ACCENT_BG } }}>
+                            <EditOutlinedIcon sx={{ fontSize: 16 }} />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                      {p.esEmpleado && (
+                        <>
+                          <Tooltip title="Editar empleado">
+                            <IconButton size="small" onClick={() => abrirEditarEmpleado(p)}
                               sx={{ color: '#888780', '&:hover': { color: ACCENT, bgcolor: ACCENT_BG } }}>
                               <EditOutlinedIcon sx={{ fontSize: 16 }} />
                             </IconButton>
                           </Tooltip>
-                        )}
-                        {p.esEmpleado && (
-                          <Tooltip title="Dar de baja">
-                            <IconButton size="small" onClick={() => abrirBaja(p)}
-                              sx={{ color: '#888780', '&:hover': { color: '#C62828', bgcolor: '#FFEBEE' } }}>
-                              <PersonOffOutlinedIcon sx={{ fontSize: 16 }} />
-                            </IconButton>
-                          </Tooltip>
-                        )}
-                      </Box>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
+                          {!p.esCliente && (
+                            <Tooltip title="Agregar como cliente">
+                              <IconButton size="small" onClick={() => abrirAgregarCliente(p)}
+                                sx={{ color: '#888780', '&:hover': { color: '#2E7D32', bgcolor: '#E8F5E9' } }}>
+                                <PersonAddOutlinedIcon sx={{ fontSize: 16 }} />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                        </>
+                      )}
+                      {(p.esCliente || p.esEmpleado) && !p.tieneCuentaCorriente && (
+                        <Tooltip title="Crear cuenta corriente">
+                          <IconButton size="small" onClick={() => abrirCrearCC(p)}
+                            sx={{ color: '#888780', '&:hover': { color: '#2E7D32', bgcolor: '#E8F5E9' } }}>
+                            <AccountBalanceOutlinedIcon sx={{ fontSize: 16 }} />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                      {(p.esEmpleado || p.esCliente) && (
+                        <Tooltip title="Dar de baja">
+                          <IconButton size="small" onClick={() => abrirBaja(p)}
+                            sx={{ color: '#888780', '&:hover': { color: '#C62828', bgcolor: '#FFEBEE' } }}>
+                            <PersonOffOutlinedIcon sx={{ fontSize: 16 }} />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </Box>
+                  </TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
         )}
       </Card>
 
-      {/* Dialog — Cliente */}
-      <Dialog open={dialogCliente} onClose={() => setDialogCliente(false)} maxWidth="sm" fullWidth
-        slotProps={{ paper: { sx: { borderRadius: 3 } } }}>
+      {/* Dialog — Cliente (crear/editar) */}
+      <Dialog open={dialogCliente} onClose={() => setDialogCliente(false)} maxWidth="sm" fullWidth slotProps={{ paper: { sx: { borderRadius: 3 } } }}>
         <DialogTitle sx={{ fontWeight: 700, fontSize: '1.1rem', pb: 1 }}>
           {personaSeleccionada ? 'Editar cliente' : 'Nuevo cliente'}
         </DialogTitle>
@@ -373,7 +427,7 @@ export default function PersonasPage() {
               <FormControl fullWidth size="small">
                 <InputLabel>Condición IVA *</InputLabel>
                 <Select label="Condición IVA *" value={formCliente.persona.condicionIVA} sx={{ borderRadius: 2 }}
-                  onChange={(e) => updatePersonaCliente('condicionIVA', e.target.value)}>
+                  onChange={(e) => updatePersonaCliente('condicionIVA', e.target.value as CondicionIVA)}>
                   {CONDICION_IVA_OPTIONS.map(o => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
                 </Select>
               </FormControl>
@@ -393,27 +447,31 @@ export default function PersonasPage() {
             <Grid size={{ xs: 6 }}>
               <TextField fullWidth size="small" label="Lista de precios" type="number" sx={fieldSx}
                 value={formCliente.listaPrecios}
-                onChange={(e) => setFormCliente((f: ClienteRequest) => ({ ...f, listaPrecios: Number(e.target.value) }))} />
+                onChange={(e) => setFormCliente(f => ({ ...f, listaPrecios: Number(e.target.value) }))} />
             </Grid>
             <Grid size={{ xs: 6 }}>
               <TextField fullWidth size="small" label="Descuento habitual (%)" type="number" sx={fieldSx}
                 value={formCliente.descuentoHabitual}
-                onChange={(e) => setFormCliente((f: ClienteRequest) => ({ ...f, descuentoHabitual: Number(e.target.value) }))} />
+                onChange={(e) => setFormCliente(f => ({ ...f, descuentoHabitual: Number(e.target.value) }))} />
             </Grid>
-            <Grid size={{ xs: 12 }}>
-              <FormControlLabel
-                control={<Switch checked={formCliente.crearCuentaCorriente}
-                  onChange={(e) => setFormCliente((f: ClienteRequest) => ({ ...f, crearCuentaCorriente: e.target.checked }))}
-                  sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: ACCENT }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: ACCENT } }} />}
-                label="Crear cuenta corriente"
-              />
-            </Grid>
-            {formCliente.crearCuentaCorriente && (
-              <Grid size={{ xs: 6 }}>
-                <TextField fullWidth size="small" label="Límite de crédito" type="number" sx={fieldSx}
-                  value={formCliente.limiteCredito}
-                  onChange={(e) => setFormCliente((f: ClienteRequest) => ({ ...f, limiteCredito: Number(e.target.value) }))} />
-              </Grid>
+            {!personaSeleccionada && (
+              <>
+                <Grid size={{ xs: 12 }}>
+                  <FormControlLabel
+                    control={<Switch checked={formCliente.crearCuentaCorriente}
+                      onChange={(e) => setFormCliente(f => ({ ...f, crearCuentaCorriente: e.target.checked }))}
+                      sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: ACCENT }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: ACCENT } }} />}
+                    label="Crear cuenta corriente"
+                  />
+                </Grid>
+                {formCliente.crearCuentaCorriente && (
+                  <Grid size={{ xs: 6 }}>
+                    <TextField fullWidth size="small" label="Límite de crédito" type="number" sx={fieldSx}
+                      value={formCliente.limiteCredito}
+                      onChange={(e) => setFormCliente(f => ({ ...f, limiteCredito: Number(e.target.value) }))} />
+                  </Grid>
+                )}
+              </>
             )}
           </Grid>
         </DialogContent>
@@ -426,10 +484,11 @@ export default function PersonasPage() {
         </DialogActions>
       </Dialog>
 
-      {/* Dialog — Empleado */}
-      <Dialog open={dialogEmpleado} onClose={() => setDialogEmpleado(false)} maxWidth="sm" fullWidth
-        slotProps={{ paper: { sx: { borderRadius: 3 } } }}>
-        <DialogTitle sx={{ fontWeight: 700, fontSize: '1.1rem', pb: 1 }}>Nuevo empleado</DialogTitle>
+      {/* Dialog — Empleado (crear/editar) */}
+      <Dialog open={dialogEmpleado} onClose={() => setDialogEmpleado(false)} maxWidth="sm" fullWidth slotProps={{ paper: { sx: { borderRadius: 3 } } }}>
+        <DialogTitle sx={{ fontWeight: 700, fontSize: '1.1rem', pb: 1 }}>
+          {personaSeleccionada ? 'Editar empleado' : 'Nuevo empleado'}
+        </DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 0.5 }}>
             <Grid size={{ xs: 12 }}>
@@ -448,23 +507,23 @@ export default function PersonasPage() {
               <FormControl fullWidth size="small">
                 <InputLabel>Condición IVA *</InputLabel>
                 <Select label="Condición IVA *" value={formEmpleado.persona.condicionIVA} sx={{ borderRadius: 2 }}
-                  onChange={(e) => updatePersonaEmpleado('condicionIVA', e.target.value)}>
+                  onChange={(e) => updatePersonaEmpleado('condicionIVA', e.target.value as CondicionIVA)}>
                   {CONDICION_IVA_OPTIONS.map(o => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
                 </Select>
               </FormControl>
             </Grid>
             <Grid size={{ xs: 6 }}>
               <TextField fullWidth size="small" label="Legajo" value={formEmpleado.legajo} sx={fieldSx}
-                onChange={(e) => setFormEmpleado((f: EmpleadoRequest) => ({ ...f, legajo: e.target.value }))} />
+                onChange={(e) => setFormEmpleado(f => ({ ...f, legajo: e.target.value }))} />
             </Grid>
             <Grid size={{ xs: 6 }}>
               <TextField fullWidth size="small" label="Cargo" value={formEmpleado.cargo} sx={fieldSx}
-                onChange={(e) => setFormEmpleado((f: EmpleadoRequest) => ({ ...f, cargo: e.target.value }))} />
+                onChange={(e) => setFormEmpleado(f => ({ ...f, cargo: e.target.value }))} />
             </Grid>
             <Grid size={{ xs: 6 }}>
               <TextField fullWidth size="small" label="Fecha de ingreso *" type="date" sx={fieldSx}
                 value={formEmpleado.fechaIngreso}
-                onChange={(e) => setFormEmpleado((f: EmpleadoRequest) => ({ ...f, fechaIngreso: e.target.value }))}
+                onChange={(e) => setFormEmpleado(f => ({ ...f, fechaIngreso: e.target.value }))}
                 slotProps={{ inputLabel: { shrink: true } }} />
             </Grid>
             <Grid size={{ xs: 6 }}>
@@ -475,20 +534,24 @@ export default function PersonasPage() {
               <TextField fullWidth size="small" label="Teléfono" value={formEmpleado.persona.telefono} sx={fieldSx}
                 onChange={(e) => updatePersonaEmpleado('telefono', e.target.value)} />
             </Grid>
-            <Grid size={{ xs: 12 }}>
-              <FormControlLabel
-                control={<Switch checked={formEmpleado.crearCuentaCorriente}
-                  onChange={(e) => setFormEmpleado((f: EmpleadoRequest) => ({ ...f, crearCuentaCorriente: e.target.checked }))}
-                  sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: ACCENT }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: ACCENT } }} />}
-                label="Crear cuenta corriente"
-              />
-            </Grid>
-            {formEmpleado.crearCuentaCorriente && (
-              <Grid size={{ xs: 6 }}>
-                <TextField fullWidth size="small" label="Límite de crédito" type="number" sx={fieldSx}
-                  value={formEmpleado.limiteCredito}
-                  onChange={(e) => setFormEmpleado((f: EmpleadoRequest) => ({ ...f, limiteCredito: Number(e.target.value) }))} />
-              </Grid>
+            {!personaSeleccionada && (
+              <>
+                <Grid size={{ xs: 12 }}>
+                  <FormControlLabel
+                    control={<Switch checked={formEmpleado.crearCuentaCorriente}
+                      onChange={(e) => setFormEmpleado(f => ({ ...f, crearCuentaCorriente: e.target.checked }))}
+                      sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: ACCENT }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: ACCENT } }} />}
+                    label="Crear cuenta corriente"
+                  />
+                </Grid>
+                {formEmpleado.crearCuentaCorriente && (
+                  <Grid size={{ xs: 6 }}>
+                    <TextField fullWidth size="small" label="Límite de crédito" type="number" sx={fieldSx}
+                      value={formEmpleado.limiteCredito}
+                      onChange={(e) => setFormEmpleado(f => ({ ...f, limiteCredito: Number(e.target.value) }))} />
+                  </Grid>
+                )}
+              </>
             )}
           </Grid>
         </DialogContent>
@@ -501,25 +564,89 @@ export default function PersonasPage() {
         </DialogActions>
       </Dialog>
 
+      {/* Dialog — Agregar como cliente */}
+      <Dialog open={dialogAgregarCliente} onClose={() => setDialogAgregarCliente(false)} maxWidth="sm" fullWidth slotProps={{ paper: { sx: { borderRadius: 3 } } }}>
+        <DialogTitle sx={{ fontWeight: 700, fontSize: '1.1rem', pb: 1 }}>Agregar como cliente</DialogTitle>
+        <DialogContent>
+          <Box sx={{ p: 1.5, bgcolor: ACCENT_BG, borderRadius: 2, mb: 2 }}>
+            <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', color: ACCENT }}>{personaAgregarCliente?.nombre}</Typography>
+            <Typography sx={{ fontSize: '0.78rem', color: '#888780' }}>
+              {personaAgregarCliente?.dni ? `DNI ${personaAgregarCliente.dni}` : personaAgregarCliente?.cuit ? `CUIT ${personaAgregarCliente.cuit}` : ''}
+            </Typography>
+          </Box>
+          <Grid container spacing={2}>
+            <Grid size={{ xs: 6 }}>
+              <TextField fullWidth size="small" label="Lista de precios" type="number" sx={fieldSx}
+                value={formAgregarCliente.listaPrecios}
+                onChange={(e) => setFormAgregarCliente(f => ({ ...f, listaPrecios: Number(e.target.value) }))} />
+            </Grid>
+            <Grid size={{ xs: 6 }}>
+              <TextField fullWidth size="small" label="Descuento habitual (%)" type="number" sx={fieldSx}
+                value={formAgregarCliente.descuentoHabitual}
+                onChange={(e) => setFormAgregarCliente(f => ({ ...f, descuentoHabitual: Number(e.target.value) }))} />
+            </Grid>
+            <Grid size={{ xs: 12 }}>
+              <FormControlLabel
+                control={<Switch checked={formAgregarCliente.crearCuentaCorriente}
+                  onChange={(e) => setFormAgregarCliente(f => ({ ...f, crearCuentaCorriente: e.target.checked }))}
+                  sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: ACCENT }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: ACCENT } }} />}
+                label="Crear cuenta corriente"
+              />
+            </Grid>
+            {formAgregarCliente.crearCuentaCorriente && (
+              <Grid size={{ xs: 6 }}>
+                <TextField fullWidth size="small" label="Límite de crédito" type="number" sx={fieldSx}
+                  value={formAgregarCliente.limiteCredito}
+                  onChange={(e) => setFormAgregarCliente(f => ({ ...f, limiteCredito: Number(e.target.value) }))} />
+              </Grid>
+            )}
+          </Grid>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+          <Button onClick={() => setDialogAgregarCliente(false)} sx={{ color: '#888780', borderRadius: 2 }}>Cancelar</Button>
+          <Button variant="contained" disableElevation onClick={handleAgregarCliente} disabled={saving}
+            sx={{ bgcolor: '#2E7D32', borderRadius: 2, fontWeight: 600, px: 3, '&:hover': { bgcolor: '#1B5E20' } }}>
+            {saving ? <CircularProgress size={18} color="inherit" /> : 'Agregar como cliente'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog — Crear cuenta corriente */}
+      <Dialog open={dialogCC} onClose={() => setDialogCC(false)} maxWidth="xs" fullWidth slotProps={{ paper: { sx: { borderRadius: 3 } } }}>
+        <DialogTitle sx={{ fontWeight: 700, fontSize: '1.1rem', pb: 1 }}>Crear cuenta corriente</DialogTitle>
+        <DialogContent>
+          <Box sx={{ p: 1.5, bgcolor: ACCENT_BG, borderRadius: 2, mb: 2 }}>
+            <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', color: ACCENT }}>{personaCC?.nombre}</Typography>
+            <Typography sx={{ fontSize: '0.78rem', color: '#888780' }}>
+              {personaCC?.dni ? `DNI ${personaCC.dni}` : personaCC?.cuit ? `CUIT ${personaCC.cuit}` : ''}
+            </Typography>
+          </Box>
+          <TextField fullWidth size="small" label="Límite de crédito ($)" type="number" sx={fieldSx}
+            value={limiteCC} onChange={(e) => setLimiteCC(e.target.value)} autoFocus />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+          <Button onClick={() => setDialogCC(false)} sx={{ color: '#888780', borderRadius: 2 }}>Cancelar</Button>
+          <Button variant="contained" disableElevation onClick={handleCrearCC} disabled={savingCC}
+            sx={{ bgcolor: '#2E7D32', borderRadius: 2, fontWeight: 600, px: 3, '&:hover': { bgcolor: '#1B5E20' } }}>
+            {savingCC ? <CircularProgress size={18} color="inherit" /> : 'Crear CC'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Dialog — Dar de baja */}
-      <Dialog open={dialogBaja} onClose={() => setDialogBaja(false)} maxWidth="xs" fullWidth
-        slotProps={{ paper: { sx: { borderRadius: 3 } } }}>
-        <DialogTitle sx={{ fontWeight: 700, fontSize: '1.1rem', pb: 1 }}>
-          Dar de baja empleado
-        </DialogTitle>
+      <Dialog open={dialogBaja} onClose={() => setDialogBaja(false)} maxWidth="xs" fullWidth slotProps={{ paper: { sx: { borderRadius: 3 } } }}>
+        <DialogTitle sx={{ fontWeight: 700, fontSize: '1.1rem', pb: 1 }}>Dar de baja</DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, p: 1.5, bgcolor: '#FFEBEE', borderRadius: 2 }}>
             <PersonOffOutlinedIcon sx={{ color: '#C62828', fontSize: 20, flexShrink: 0, mt: 0.2 }} />
             <Typography sx={{ fontSize: '0.9rem', color: '#C62828' }}>
-              ¿Dar de baja a <strong>"{personaADarBaja?.nombre}"</strong>? El empleado quedará inactivo en el sistema.
+              ¿Dar de baja a <strong>"{personaADarBaja?.nombre}"</strong>? Quedará inactivo en el sistema.
             </Typography>
           </Box>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-          <Button onClick={() => setDialogBaja(false)} sx={{ color: '#888780', borderRadius: 2 }}>
-            Cancelar
-          </Button>
-          <Button variant="contained" disableElevation onClick={handleBajaEmpleado}
+          <Button onClick={() => setDialogBaja(false)} sx={{ color: '#888780', borderRadius: 2 }}>Cancelar</Button>
+          <Button variant="contained" disableElevation onClick={handleBajaPersona}
             sx={{ bgcolor: '#C62828', borderRadius: 2, fontWeight: 600, px: 3, '&:hover': { bgcolor: '#B71C1C' } }}>
             Dar de baja
           </Button>

@@ -37,3 +37,14 @@ export const crearEmpleado = (req: EmpleadoRequest) =>
 
 export const darBajaEmpleado = (id: number) =>
   api.patch<{ data: PersonaResponse }>(`/api/personas/empleados/${id}/baja`);
+export const editarEmpleado = (id: number, req: EmpleadoRequest) =>
+  api.put<{ data: PersonaResponse }>(`/api/personas/empleados/${id}`, req);
+
+export const agregarRolCliente = (id: number, req: ClienteRequest) =>
+  api.post<{ data: PersonaResponse }>(`/api/personas/${id}/cliente`, req);
+export const darBajaPersona = (id: number) =>
+  api.patch<{ data: PersonaResponse }>(`/api/personas/${id}/baja`);
+export const crearCuentaCorriente = (id: number, limite = 0) =>
+  api.post<{ data: PersonaResponse }>(`/api/personas/${id}/cuenta-corriente`, null, {
+    params: { limite },
+  });
