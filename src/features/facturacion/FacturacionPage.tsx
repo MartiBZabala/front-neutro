@@ -13,7 +13,7 @@ import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import {
-  listarRechazados, reintentarComprobante, getComprobantePorVenta, descargarYAbrirPdf,
+  listarRechazados, reintentarComprobante, getComprobantePorVenta, descargarYAbrirPdf, listarTodos,
 } from '../../api/facturacionApi';
 import type { ComprobanteResponse, EstadoComprobante } from '../../types/facturacion';
 
@@ -53,9 +53,12 @@ export default function FacturacionPage() {
     const init = async () => {
       setLoading(true);
       try {
-        const res = await listarRechazados();
-        setRechazados(res.data.data);
-        setComprobantes(res.data.data);
+        const [todosRes, rechazadosRes] = await Promise.all([
+          listarTodos(),
+          listarRechazados(),
+        ]);
+        setComprobantes(todosRes.data.data);
+        setRechazados(rechazadosRes.data.data);
       } catch {
         setError('Error al cargar comprobantes');
       } finally {
@@ -67,8 +70,12 @@ export default function FacturacionPage() {
 
   const cargarRechazados = async () => {
     try {
-      const res = await listarRechazados();
-      setRechazados(res.data.data);
+      const [todosRes, rechazadosRes] = await Promise.all([
+        listarTodos(),
+        listarRechazados(),
+      ]);
+      setComprobantes(todosRes.data.data);
+      setRechazados(rechazadosRes.data.data);
     } catch {
       setError('Error al cargar rechazados');
     }

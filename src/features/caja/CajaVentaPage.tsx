@@ -9,6 +9,8 @@ import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import PointOfSaleOutlinedIcon from '@mui/icons-material/PointOfSaleOutlined';
 import BadgeOutlinedIcon from '@mui/icons-material/BadgeOutlined';
 import { buscarProductos, agregarItem, cobrarVenta, crearVenta } from '../../api/ventaApi';
+import { getComprobantePorVenta, descargarYAbrirPdf } from '../../api/facturacionApi';
+import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import type { ProductoResponse } from '../../types/producto';
 import type { VentaResponse } from '../../types/venta';
 import type { MedioPago } from '../../types/medioPago';
@@ -77,6 +79,8 @@ export default function CajaVentaPage() {
   const [vueltoFinal, setVueltoFinal] = useState(0);
   const [medioFinal, setMedioFinal] = useState<MedioPago>('EFECTIVO');
   const [montoRecibidoFinal, setMontoRecibidoFinal] = useState('');
+  const [comprobanteId, setComprobanteId] = useState<number | null>(null);
+  const [descargandoPdf, setDescargandoPdf] = useState(false);
 
   const total = venta?.total ?? 0;
   const vuelto = medio === 'EFECTIVO' && montoRecibido
@@ -237,6 +241,17 @@ export default function CajaVentaPage() {
       setMedioFinal(medio);
       setMontoRecibidoFinal(montoRecibido);
       setVentaCobrada(res.data.data);
+      // Intentar obtener el comprobante autorizado para habilitar descarga PDF
+      try {
+        const compRes = await getComprobantePorVenta(venta.id);
+        if (compRes.data.data.estado === 'AUTORIZADO') {
+          setComprobanteId(compRes.data.data.id);
+        } else {
+          setComprobanteId(null);
+        }
+      } catch {
+        setComprobanteId(null);
+      }
       setDialogTicket(true);
       setVenta(null);
       setMontoRecibido('');
@@ -256,7 +271,20 @@ export default function CajaVentaPage() {
   const handleNuevaVenta = () => {
     setDialogTicket(false);
     setVentaCobrada(null);
+    setComprobanteId(null);
     focoInput();
+  };
+
+  const handleDescargarFactura = async () => {
+    if (!comprobanteId) return;
+    setDescargandoPdf(true);
+    try {
+      await descargarYAbrirPdf(comprobanteId);
+    } catch {
+      setError('Error al descargar la factura PDF');
+    } finally {
+      setDescargandoPdf(false);
+    }
   };
 
   if (verificandoTurno) {
@@ -660,6 +688,17 @@ export default function CajaVentaPage() {
         <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
           <Button variant="outlined" startIcon={<PrintOutlinedIcon />} onClick={() => window.print()}
             sx={{ borderColor: '#E3E1DB', borderRadius: 2, color: '#3C3B38' }}>Imprimir</Button>
+          {comprobanteId && (
+            <Button
+              variant="outlined"
+              startIcon={descargandoPdf ? <CircularProgress size={14} /> : <PictureAsPdfOutlinedIcon />}
+              onClick={() => void handleDescargarFactura()}
+              disabled={descargandoPdf}
+              sx={{ borderColor: ACCENT, color: ACCENT, borderRadius: 2, fontWeight: 600, '&:hover': { bgcolor: ACCENT_BG, borderColor: ACCENT } }}
+            >
+              Factura PDF
+            </Button>
+          )}
           <Button fullWidth variant="contained" disableElevation onClick={handleNuevaVenta} autoFocus
             sx={{ py: 1.2, borderRadius: 2, bgcolor: ACCENT, fontWeight: 600, '&:hover': { bgcolor: '#2E4A7A' } }}>
             Nueva venta — Enter ↵

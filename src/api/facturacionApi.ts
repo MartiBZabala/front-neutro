@@ -20,6 +20,9 @@ export const emitirComprobante = (ventaId: number) =>
 export const getComprobantePorVenta = (ventaId: number) =>
   api.get<{ data: ComprobanteResponse }>(`/api/comprobantes/venta/${ventaId}`);
 
+export const listarTodos = () =>
+  api.get<{ data: ComprobanteResponse[] }>("/api/comprobantes");
+
 export const listarRechazados = () =>
   api.get<{ data: ComprobanteResponse[] }>('/api/comprobantes/rechazados');
 
