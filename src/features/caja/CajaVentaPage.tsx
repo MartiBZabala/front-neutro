@@ -20,7 +20,7 @@ import { buscarPersonas } from '../../api/personasApi';
 import { abrirCaja, miTurnoActual, arquearCaja, confirmarCierre } from '../../api/cajaApi';
 import { getCCPorPersona } from '../../api/cuentaCorrienteApi';
 import type { CCResponse } from '../../types/cuentaCorriente';
-import { generarPdfCierre } from '../../utils/reporteCierre';
+import { descargarCierreCajaPdf } from '../../api/reporteApi';
 
 const ACCENT = '#3B5B8C';
 const ACCENT_BG = '#EEF2F8';
@@ -194,24 +194,8 @@ export default function CajaVentaPage() {
       const res = await confirmarCierre(turnoActualId);
       const turno = res.data.data;
 
-      generarPdfCierre({
-        turnoId: turno.id,
-        cajeroNombre: turno.nombreUsuario,
-        apertura: turno.apertura,
-        cierre: turno.cierre ?? new Date().toISOString(),
-        fondoInicial: Number(turno.fondoInicial ?? 0),
-        sistemaEfectivo: Number(turno.totalEfectivo ?? 0),
-        sistemaDebito: Number(turno.totalTarjetaDebito ?? 0),
-        sistemaCredito: Number(turno.totalTarjetaCredito ?? 0),
-        sistemaTransferencia: Number(turno.totalTransferencia ?? 0),
-        sistemaCC: Number(turno.totalCC ?? 0),
-        contadoEfectivo: req.efectivo,
-        contadoDebito: req.tarjetaDebito,
-        contadoCredito: req.tarjetaCredito,
-        contadoTransferencia: req.transferencia,
-        contadoCC: req.cuentaCorriente,
-        diferencia: Number(turno.diferencia ?? 0),
-      });
+      // PDF generado por el backend
+      await descargarCierreCajaPdf(turno.id);
 
       setDialogCierre(false);
       setTurnoActualId(null);

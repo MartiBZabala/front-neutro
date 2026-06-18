@@ -30,3 +30,13 @@ export const descargarReporteCaja = (desde?: string, hasta?: string) =>
 
 export const descargarReporteCuentaCorriente = (desde?: string, hasta?: string) =>
   descargarXlsx('/api/reportes/cuenta-corriente', 'reporte-cuenta-corriente.xlsx', { ...(desde ? { desde } : {}), ...(hasta ? { hasta } : {}) });
+
+export const descargarCierreCajaPdf = async (turnoId: number) => {
+  const res = await api.get(`/api/caja/${turnoId}/cierre-pdf`, { responseType: 'blob' });
+  const blob = new Blob([res.data], { type: 'application/pdf' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `cierre-caja-turno-${turnoId}.pdf`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+};
