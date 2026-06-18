@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box, Card, CardContent, Typography, Grid,
   ToggleButtonGroup, ToggleButton, CircularProgress, Alert, Chip, Button,
@@ -19,7 +19,7 @@ import { listarProductos } from '../../api/productoApi';
 import { listarVentas } from '../../api/ventaApi';
 import type { ProductoResponse } from '../../types/producto';
 import type { VentaResponse } from '../../types/venta';
-import { descargarReporteCaja, descargarReporteCuentaCorriente, descargarReporteVentas } from '../../api/reporteApi';
+import { descargarReporteCaja, descargarReporteCuentaCorriente, descargarReporteVentas, descargarResumenDiario } from '../../api/reporteApi';
 
 const ACCENT = '#3B5B8C';
 const ACCENT_BG = '#EEF2F8';
@@ -168,26 +168,33 @@ export default function ReportesPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [descargando, setDescargando] = useState<string | null>(null);
+  const [fechaResumen, setFechaResumen] = useState<string>(new Date().toISOString().split('T')[0]);
 
-  const cargar = useCallback(async (p: Periodo) => {
+  useEffect(() => {
+    let activo = true;
+    const fetchData = async () => {
+      const { desde, hasta } = getRango(periodo);
+      try {
+        const [ventasRes, prodRes] = await Promise.all([
+          listarVentas(desde, hasta, 0, 500),
+          listarProductos(undefined, undefined, 0, 200),
+        ]);
+        if (!activo) return;
+        setLoading(false);
+        setError(null);
+        setVentas(ventasRes.data.data.content.filter(v => v.estado === 'PAGADA'));
+        setProductosStockBajo(prodRes.data.data.content.filter(p => p.stockBajo));
+      } catch {
+        if (!activo) return;
+        setLoading(false);
+        setError('Error al cargar datos');
+      }
+    };
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
-    setError(null);
-    try {
-      const { desde, hasta } = getRango(p);
-      const [ventasRes, prodRes] = await Promise.all([
-        listarVentas(desde, hasta, 0, 500),
-        listarProductos(undefined, undefined, 0, 200),
-      ]);
-      setVentas(ventasRes.data.data.content.filter(v => v.estado === 'PAGADA'));
-      setProductosStockBajo(prodRes.data.data.content.filter(p => p.stockBajo));
-    } catch {
-      setError('Error al cargar datos');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { void cargar(periodo); }, [periodo, cargar]);
+    void fetchData();
+    return () => { activo = false; };
+  }, [periodo]);
 
   const handleDescargar = async (tipo: string, fn: () => Promise<void>) => {
     setDescargando(tipo);
@@ -252,6 +259,53 @@ export default function ReportesPage() {
       </Box>
 
       {error && <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }} onClose={() => setError(null)}>{error}</Alert>}
+
+
+      {/* Resumen diario PDF */}
+      <Card elevation={0} sx={{ border: '1px solid #E3E1DB', borderRadius: 3, mb: 3 }}>
+        <CardContent sx={{ p: 2.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+            <Box sx={{ bgcolor: '#FFF3E0', borderRadius: 1.5, p: 0.75, display: 'flex' }}>
+              <DownloadOutlinedIcon sx={{ fontSize: 18, color: '#E65100' }} />
+            </Box>
+            <Box>
+              <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', color: '#2C2C2A' }}>
+                Resumen diario
+              </Typography>
+              <Typography sx={{ fontSize: '0.78rem', color: '#888780' }}>
+                PDF ejecutivo con ventas, medios de pago, top productos y turnos del día
+              </Typography>
+            </Box>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <input
+              type="date"
+              value={fechaResumen}
+              onChange={(e) => setFechaResumen(e.target.value)}
+              style={{
+                border: '1px solid #E3E1DB', borderRadius: 8, padding: '8px 12px',
+                fontSize: '0.875rem', color: '#2C2C2A', outline: 'none',
+              }}
+            />
+            <Button
+              variant="contained" disableElevation
+              startIcon={descargando === 'resumen'
+                ? <CircularProgress size={14} color="inherit" />
+                : <DownloadOutlinedIcon sx={{ fontSize: 16 }} />
+              }
+              disabled={descargando !== null}
+              onClick={() => void handleDescargar('resumen', () => descargarResumenDiario(fechaResumen))}
+              sx={{
+                bgcolor: '#E65100', borderRadius: 2, fontWeight: 600, fontSize: '0.85rem',
+                '&:hover': { bgcolor: '#BF360C' },
+                '&.Mui-disabled': { bgcolor: '#E3E1DB', color: '#B4B2A9' },
+              }}
+            >
+              {descargando === 'resumen' ? 'Generando...' : 'Descargar PDF'}
+            </Button>
+          </Box>
+        </CardContent>
+      </Card>
 
       {/* Descarga de reportes */}
       <Card elevation={0} sx={{ border: '1px solid #E3E1DB', borderRadius: 3, mb: 3 }}>

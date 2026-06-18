@@ -40,3 +40,15 @@ export const descargarCierreCajaPdf = async (turnoId: number) => {
   link.click();
   URL.revokeObjectURL(link.href);
 };
+
+export const descargarResumenDiario = async (fecha?: string) => {
+  const params = fecha ? { fecha } : {};
+  const res = await api.get('/api/reportes/resumen-diario', { params, responseType: 'blob' });
+  const blob = new Blob([res.data], { type: 'application/pdf' });
+  const link = document.createElement('a');
+  const f = fecha ?? new Date().toISOString().split('T')[0];
+  link.href = URL.createObjectURL(blob);
+  link.download = `resumen-diario-${f}.pdf`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+};
