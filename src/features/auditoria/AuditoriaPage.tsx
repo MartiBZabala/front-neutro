@@ -12,27 +12,10 @@ import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
 import PersonOffOutlinedIcon from '@mui/icons-material/PersonOffOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
-import { listarProductos } from '../../api/productoApi';
-import { listarVentas } from '../../api/ventaApi';
-import type { ProductoResponse } from '../../types/producto';
-import type { VentaResponse } from '../../types/venta';
+import { listarAuditoria, type AuditoriaResponse } from '../../api/auditoriaApi';
 
 const ACCENT = '#3B5B8C';
 const ACCENT_BG = '#EEF2F8';
-
-type AccionTipo =
-  | 'ANULAR_VENTA' | 'AJUSTE_STOCK' | 'BAJA_PRODUCTO'
-  | 'CREAR_EMPLEADO' | 'BAJA_EMPLEADO' | 'FIJAR_LIMITE_CC'
-  | 'LIQUIDAR_CC_EMPLEADO' | 'AJUSTE_CC' | 'REINTENTAR_COMPROBANTE';
-
-interface EventoAuditoria {
-  id: string;
-  fecha: string;
-  accion: AccionTipo | string;
-  tabla: string;
-  usuario: string;
-  detalle: string;
-}
 
 const ACCION_STYLE: Record<string, { color: string; bg: string; icon: React.ReactNode }> = {
   ANULAR_VENTA:           { color: '#C62828', bg: '#FFEBEE', icon: <CancelOutlinedIcon sx={{ fontSize: 13 }} /> },
@@ -51,12 +34,6 @@ const TABLA_LABEL: Record<string, string> = {
   personas: 'Personas', cuentas_corrientes: 'Cta. Corriente', comprobantes: 'Facturación',
 };
 
-const ACCIONES_DISPONIBLES: string[] = [
-  'ANULAR_VENTA', 'AJUSTE_STOCK', 'BAJA_PRODUCTO',
-  'CREAR_EMPLEADO', 'BAJA_EMPLEADO', 'FIJAR_LIMITE_CC',
-  'LIQUIDAR_CC_EMPLEADO', 'AJUSTE_CC', 'REINTENTAR_COMPROBANTE',
-];
-
 const fieldSx = {
   '& .MuiOutlinedInput-root': {
     borderRadius: 2, bgcolor: '#FAFAF9',
@@ -65,29 +42,46 @@ const fieldSx = {
   },
 };
 
-const productosAEventos = (productos: ProductoResponse[]): EventoAuditoria[] =>
-  productos.map((p) => ({
-    id: `stock-${p.id}`,
-    fecha: new Date().toISOString(),
-    accion: 'AJUSTE_STOCK',
-    tabla: 'productos',
-    usuario: 'Sistema',
-    detalle: `${p.nombre} — stock: ${p.stockActual} (mín: ${p.stockMinimo})`,
-  }));
+const formatDetalle = (e: AuditoriaResponse): string => {
+  const raw = e.datosNuevos ?? e.datosAnteriores ?? e.error ?? '';
+  if (!raw) return '—';
 
-const ventasAEventos = (ventas: VentaResponse[]): EventoAuditoria[] =>
-  ventas.map((v) => ({
-    id: `venta-${v.id}`,
-    fecha: v.fechaHora,
-    accion: 'ANULAR_VENTA',
-    tabla: 'ventas',
-    usuario: 'Admin',
-    detalle: `Venta #${v.id}${v.nombrePersona ? ` — ${v.nombrePersona}` : ''} — total: $${Number(v.total).toLocaleString('es-AR')}`,
-  }));
+  const matchNombre = raw.match(/nombre=([^,\]]+)/);
+  const matchCodigo = raw.match(/codigo=([^,\]]+)/);
+  const matchId = raw.match(/id=(\d+)/);
+  const matchMonto = raw.match(/monto=([^,\]]+)/);
+  const matchLegajo = raw.match(/legajo=([^,\]]+)/);
+  const matchCargo = raw.match(/cargo=([^,\]]+)/);
+  const matchStock = raw.match(/stockActual=([^,\]]+)/);
+
+  if (matchNombre ?? matchCodigo) {
+    const partes: string[] = [];
+    if (matchNombre) partes.push(matchNombre[1].trim());
+    if (matchCodigo) partes.push(`Cód: ${matchCodigo[1].trim()}`);
+    if (matchStock) partes.push(`Stock: ${matchStock[1].trim()}`);
+    if (matchMonto) partes.push(`$${matchMonto[1].trim()}`);
+    if (matchLegajo) partes.push(`Legajo: ${matchLegajo[1].trim()}`);
+    if (matchCargo) partes.push(`Cargo: ${matchCargo[1].trim()}`);
+    if (matchId) partes.push(`#${matchId[1]}`);
+    return partes.join(' · ');
+  }
+
+  try {
+    const obj = JSON.parse(raw);
+    const partes: string[] = [];
+    if (obj.nombre) partes.push(obj.nombre);
+    if (obj.codigo) partes.push(`Cód: ${obj.codigo}`);
+    if (obj.monto) partes.push(`$${obj.monto}`);
+    if (obj.id) partes.push(`#${obj.id}`);
+    return partes.length > 0 ? partes.join(' · ') : raw.substring(0, 80);
+  } catch {
+    return raw.length > 80 ? raw.substring(0, 80) + '...' : raw;
+  }
+};
 
 export default function AuditoriaPage() {
-  const [eventos, setEventos] = useState<EventoAuditoria[]>([]);
-  const [filtrados, setFiltrados] = useState<EventoAuditoria[]>([]);
+  const [eventos, setEventos] = useState<AuditoriaResponse[]>([]);
+  const [filtrados, setFiltrados] = useState<AuditoriaResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busqueda, setBusqueda] = useState('');
@@ -99,18 +93,10 @@ export default function AuditoriaPage() {
     const init = async () => {
       setLoading(true);
       try {
-        const [prodRes, ventasRes] = await Promise.all([
-          listarProductos(undefined, undefined, 0, 200),
-          listarVentas('2000-01-01T00:00:00', '2099-12-31T23:59:59', 0, 200),
-        ]);
-        const stockBajo = prodRes.data.data.content.filter(p => p.stockBajo);
-        const ventasAnuladas = ventasRes.data.data.content.filter(v => v.estado === 'ANULADA');
-        const todos = [
-          ...ventasAEventos(ventasAnuladas),
-          ...productosAEventos(stockBajo),
-        ].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
-        setEventos(todos);
-        setFiltrados(todos);
+        const res = await listarAuditoria(0, 200);
+        const data = res.data.data.content;
+        setEventos(data);
+        setFiltrados(data);
       } catch {
         setError('Error al cargar datos de auditoría');
       } finally {
@@ -125,9 +111,9 @@ export default function AuditoriaPage() {
     if (busqueda) {
       const q = busqueda.toLowerCase();
       result = result.filter(e =>
-        e.detalle.toLowerCase().includes(q) ||
-        e.usuario.toLowerCase().includes(q) ||
-        e.accion.toLowerCase().includes(q)
+        e.accion.toLowerCase().includes(q) ||
+        (e.tabla ?? '').toLowerCase().includes(q) ||
+        formatDetalle(e).toLowerCase().includes(q)
       );
     }
     if (accionFiltro) result = result.filter(e => e.accion === accionFiltro);
@@ -142,6 +128,7 @@ export default function AuditoriaPage() {
   };
 
   const contarPor = (accion: string) => eventos.filter(e => e.accion === accion).length;
+  const accionesUnicas = [...new Set(eventos.map(e => e.accion))].sort();
 
   const formatFecha = (f: string) =>
     new Date(f).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -150,7 +137,6 @@ export default function AuditoriaPage() {
 
   return (
     <Box>
-      {/* Encabezado */}
       <Box sx={{ mb: 3 }}>
         <Typography sx={{ fontSize: '1.4rem', fontWeight: 700, color: '#2C2C2A', letterSpacing: '-0.3px' }}>
           Auditoría
@@ -167,14 +153,13 @@ export default function AuditoriaPage() {
         {[
           { label: 'Total eventos', value: eventos.length, icon: <HistoryOutlinedIcon sx={{ fontSize: 18 }} />, color: ACCENT, bg: ACCENT_BG },
           { label: 'Ventas anuladas', value: contarPor('ANULAR_VENTA'), icon: <CancelOutlinedIcon sx={{ fontSize: 18 }} />, color: '#C62828', bg: '#FFEBEE' },
-          { label: 'Stock crítico', value: contarPor('AJUSTE_STOCK'), icon: <TuneOutlinedIcon sx={{ fontSize: 18 }} />, color: ACCENT, bg: ACCENT_BG },
-          { label: 'Comp. rechazados', value: contarPor('REINTENTAR_COMPROBANTE'), icon: <WarningAmberOutlinedIcon sx={{ fontSize: 18 }} />, color: '#C62828', bg: '#FFEBEE' },
+          { label: 'Ajustes stock', value: contarPor('AJUSTE_STOCK'), icon: <TuneOutlinedIcon sx={{ fontSize: 18 }} />, color: ACCENT, bg: ACCENT_BG },
+          { label: 'Bajas empleados', value: contarPor('BAJA_EMPLEADO'), icon: <PersonOffOutlinedIcon sx={{ fontSize: 18 }} />, color: '#E65100', bg: '#FFF3E0' },
         ].map((m) => (
           <Grid size={{ xs: 12, sm: 6, md: 3 }} key={m.label}>
             <Card elevation={0} sx={{
               border: '1px solid #E3E1DB', borderRadius: 3,
-              transition: 'box-shadow 0.2s, transform 0.2s',
-              '&:hover': { boxShadow: '0 8px 32px rgba(59,91,140,0.10)', transform: 'translateY(-2px)' },
+              transition: 'box-shadow 0.2s', '&:hover': { boxShadow: '0 4px 20px rgba(0,0,0,0.07)' },
             }}>
               <Box sx={{ p: 2.5, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <Box>
@@ -183,9 +168,7 @@ export default function AuditoriaPage() {
                     {loading ? '...' : m.value}
                   </Typography>
                 </Box>
-                <Box sx={{ bgcolor: m.bg, color: m.color, borderRadius: 2, p: 0.75, display: 'flex' }}>
-                  {m.icon}
-                </Box>
+                <Box sx={{ bgcolor: m.bg, color: m.color, borderRadius: 2, p: 0.75, display: 'flex' }}>{m.icon}</Box>
               </Box>
             </Card>
           </Grid>
@@ -199,43 +182,33 @@ export default function AuditoriaPage() {
             <FilterAltOutlinedIcon sx={{ fontSize: 18, color: ACCENT }} />
             <Typography sx={{ fontWeight: 600, fontSize: '0.875rem', color: '#2C2C2A' }}>Filtros</Typography>
           </Box>
-          <TextField
-            size="small"
-            placeholder="Buscar por usuario, acción o detalle..."
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
+          <TextField size="small" placeholder="Buscar por acción, módulo o detalle..."
+            value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && aplicarFiltros()}
             sx={{ flex: 1, minWidth: 200, ...fieldSx }}
             slotProps={{ input: { startAdornment: <SearchOutlinedIcon sx={{ fontSize: 17, color: '#B4B2A9', mr: 0.5 }} /> } }}
           />
           <FormControl size="small" sx={{ minWidth: 190 }}>
             <InputLabel>Acción</InputLabel>
-            <Select label="Acción" value={accionFiltro}
-              onChange={(e) => setAccionFiltro(e.target.value)}
+            <Select label="Acción" value={accionFiltro} onChange={(e) => setAccionFiltro(e.target.value)}
               sx={{ borderRadius: 2, bgcolor: '#FAFAF9' }}>
               <MenuItem value="">Todas las acciones</MenuItem>
-              {ACCIONES_DISPONIBLES.map(a => (
+              {accionesUnicas.map(a => (
                 <MenuItem key={a} value={a}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Box sx={{ color: ACCION_STYLE[a]?.color ?? '#888780' }}>
-                      {ACCION_STYLE[a]?.icon}
-                    </Box>
+                    <Box sx={{ color: ACCION_STYLE[a]?.color ?? '#888780' }}>{ACCION_STYLE[a]?.icon}</Box>
                     <Typography sx={{ fontSize: '0.85rem' }}>{a.replace(/_/g, ' ')}</Typography>
                   </Box>
                 </MenuItem>
               ))}
             </Select>
           </FormControl>
-          <TextField size="small" type="date" label="Desde"
-            value={desde} onChange={(e) => setDesde(e.target.value)}
-            slotProps={{ inputLabel: { shrink: true } }}
-            sx={fieldSx}
-          />
-          <TextField size="small" type="date" label="Hasta"
-            value={hasta} onChange={(e) => setHasta(e.target.value)}
-            slotProps={{ inputLabel: { shrink: true } }}
-            sx={fieldSx}
-          />
+          <TextField size="small" type="date" label="Desde" value={desde}
+            onChange={(e) => setDesde(e.target.value)}
+            slotProps={{ inputLabel: { shrink: true } }} sx={fieldSx} />
+          <TextField size="small" type="date" label="Hasta" value={hasta}
+            onChange={(e) => setHasta(e.target.value)}
+            slotProps={{ inputLabel: { shrink: true } }} sx={fieldSx} />
           <Button variant="contained" disableElevation onClick={aplicarFiltros}
             sx={{ bgcolor: ACCENT, borderRadius: 2, fontWeight: 600, px: 2.5, '&:hover': { bgcolor: '#2E4A7A' } }}>
             Filtrar
@@ -266,7 +239,7 @@ export default function AuditoriaPage() {
           <Table size="small">
             <TableHead>
               <TableRow sx={{ bgcolor: '#F4F3F1' }}>
-                {['Fecha y hora', 'Acción', 'Módulo', 'Usuario', 'Detalle'].map((col) => (
+                {['Fecha y hora', 'Acción', 'Módulo', 'Registro', 'Detalle'].map((col) => (
                   <TableCell key={col} sx={{ fontWeight: 700, color: '#888780', fontSize: '0.8rem', letterSpacing: '0.3px', py: 1.5 }}>
                     {col}
                   </TableCell>
@@ -285,6 +258,8 @@ export default function AuditoriaPage() {
                 </TableRow>
               ) : filtrados.map((e) => {
                 const style = ACCION_STYLE[e.accion] ?? { color: '#888780', bg: '#F5F5F5', icon: null };
+                const detalle = formatDetalle(e);
+                const esError = !e.datosNuevos && !e.datosAnteriores && !!e.error;
                 return (
                   <TableRow key={e.id} sx={{ '&:hover': { bgcolor: '#FAFAF9' }, '& td': { borderBottom: '1px solid #F0EEE8' } }}>
                     <TableCell>
@@ -309,29 +284,24 @@ export default function AuditoriaPage() {
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                         <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: ACCENT, flexShrink: 0 }} />
                         <Typography sx={{ fontSize: '0.82rem', color: '#5F5E5A', fontWeight: 500 }}>
-                          {TABLA_LABEL[e.tabla] ?? e.tabla}
+                          {TABLA_LABEL[e.tabla] ?? e.tabla ?? '—'}
                         </Typography>
                       </Box>
                     </TableCell>
                     <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Box sx={{
-                          width: 26, height: 26, borderRadius: '50%',
-                          bgcolor: e.usuario === 'Sistema' ? '#F4F3F1' : ACCENT_BG,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                        }}>
-                          <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: e.usuario === 'Sistema' ? '#888780' : ACCENT }}>
-                            {e.usuario[0]}
-                          </Typography>
-                        </Box>
-                        <Typography sx={{ fontSize: '0.85rem', fontWeight: 500, color: '#2C2C2A' }}>
-                          {e.usuario}
-                        </Typography>
-                      </Box>
+                      <Typography sx={{ fontSize: '0.82rem', color: '#888780', fontFamily: 'monospace' }}>
+                        {e.registroId ? `#${e.registroId}` : '—'}
+                      </Typography>
                     </TableCell>
-                    <TableCell>
-                      <Typography sx={{ fontSize: '0.85rem', color: '#5F5E5A' }}>
-                        {e.detalle}
+                    <TableCell sx={{ maxWidth: 320 }}>
+                      <Typography sx={{
+                        fontSize: '0.82rem',
+                        color: esError ? '#C62828' : '#5F5E5A',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {detalle}
                       </Typography>
                     </TableCell>
                   </TableRow>

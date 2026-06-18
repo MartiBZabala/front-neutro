@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Box, Card, CardContent, Typography, Grid,
-  ToggleButtonGroup, ToggleButton, CircularProgress, Alert, Chip,
+  ToggleButtonGroup, ToggleButton, CircularProgress, Alert, Chip, Button,
 } from '@mui/material';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip,
@@ -13,10 +13,13 @@ import BarChartOutlinedIcon from '@mui/icons-material/BarChartOutlined';
 import ShoppingBagOutlinedIcon from '@mui/icons-material/ShoppingBagOutlined';
 import ReceiptOutlinedIcon from '@mui/icons-material/ReceiptOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
+import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
+import TableChartOutlinedIcon from '@mui/icons-material/TableChartOutlined';
 import { listarProductos } from '../../api/productoApi';
 import { listarVentas } from '../../api/ventaApi';
 import type { ProductoResponse } from '../../types/producto';
 import type { VentaResponse } from '../../types/venta';
+import { descargarReporteCaja, descargarReporteCuentaCorriente, descargarReporteVentas } from '../../api/reporteApi';
 
 const ACCENT = '#3B5B8C';
 const ACCENT_BG = '#EEF2F8';
@@ -37,6 +40,11 @@ function getRango(periodo: Periodo): { desde: string; hasta: string } {
   desde.setDate(desde.getDate() - dias + 1);
   return { desde: desde.toISOString().split('T')[0] + 'T00:00:00', hasta };
 }
+
+const getRangoParams = (p: Periodo): [string, string] => {
+  const { desde, hasta } = getRango(p);
+  return [desde, hasta];
+};
 
 function agruparPorHora(ventas: VentaResponse[]) {
   const mapa: Record<number, number> = {};
@@ -159,6 +167,7 @@ export default function ReportesPage() {
   const [productosStockBajo, setProductosStockBajo] = useState<ProductoResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [descargando, setDescargando] = useState<string | null>(null);
 
   const cargar = useCallback(async (p: Periodo) => {
     setLoading(true);
@@ -180,14 +189,40 @@ export default function ReportesPage() {
 
   useEffect(() => { void cargar(periodo); }, [periodo, cargar]);
 
+  const handleDescargar = async (tipo: string, fn: () => Promise<void>) => {
+    setDescargando(tipo);
+    try { await fn(); } catch { setError(`Error al descargar reporte de ${tipo}`); }
+    finally { setDescargando(null); }
+  };
+
   const totalVentas = ventas.reduce((acc, v) => acc + Number(v.total ?? 0), 0);
   const ticketPromedio = ventas.length > 0 ? Math.round(totalVentas / ventas.length) : 0;
   const graficoDatos: { hora?: string; dia?: string; total: number }[] =
   periodo === 'hoy' ? agruparPorHora(ventas) : agruparPorDia(ventas);
   const mediosPago = calcularMediosPago(ventas);
   const topProductos = calcularTopProductos(ventas);
-
   const formatMonto = (v: number) => `$${v.toLocaleString('es-AR')}`;
+
+  const REPORTES = [
+    {
+      key: 'ventas',
+      label: 'Ventas',
+      desc: 'Resumen y detalle de ventas del período',
+      fn: () => descargarReporteVentas(...getRangoParams(periodo)),
+    },
+    {
+      key: 'caja',
+      label: 'Caja',
+      desc: 'Turnos de caja, fondos y totales por cajero',
+      fn: () => descargarReporteCaja(...getRangoParams(periodo)),
+    },
+    {
+      key: 'cuenta-corriente',
+      label: 'Cta. Corriente',
+      desc: 'Saldos y movimientos de cuentas corrientes',
+      fn: () => descargarReporteCuentaCorriente(...getRangoParams(periodo)),
+    },
+  ];
 
   return (
     <Box>
@@ -209,52 +244,88 @@ export default function ReportesPage() {
               border: 'none', borderRadius: 1.5, color: '#888780', fontWeight: 500,
               '&.Mui-selected': { bgcolor: '#fff', color: ACCENT, fontWeight: 700, boxShadow: '0 1px 4px rgba(0,0,0,0.1)' },
             },
-          }}
-        >
+          }}>
           <ToggleButton value="hoy">Hoy</ToggleButton>
           <ToggleButton value="semana">Semana</ToggleButton>
           <ToggleButton value="mes">Mes</ToggleButton>
         </ToggleButtonGroup>
       </Box>
 
-      {error && <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>{error}</Alert>}
+      {error && <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }} onClose={() => setError(null)}>{error}</Alert>}
+
+      {/* Descarga de reportes */}
+      <Card elevation={0} sx={{ border: '1px solid #E3E1DB', borderRadius: 3, mb: 3 }}>
+        <CardContent sx={{ p: 2.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+            <Box sx={{ bgcolor: ACCENT_BG, borderRadius: 1.5, p: 0.75, display: 'flex' }}>
+              <TableChartOutlinedIcon sx={{ fontSize: 18, color: ACCENT }} />
+            </Box>
+            <Box>
+              <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', color: '#2C2C2A' }}>
+                Descargar reportes Excel
+              </Typography>
+              <Typography sx={{ fontSize: '0.78rem', color: '#888780' }}>
+                Se generan con el rango del período seleccionado · Incluye todas las cajas del período
+              </Typography>
+            </Box>
+          </Box>
+          <Grid container spacing={1.5}>
+            {REPORTES.map((r) => (
+              <Grid size={{ xs: 12, sm: 4 }} key={r.key}>
+                <Box sx={{
+                  border: '1px solid #E3E1DB', borderRadius: 2.5, p: 2,
+                  display: 'flex', flexDirection: 'column', gap: 1.5,
+                  bgcolor: '#FAFAF9', transition: 'all 0.15s',
+                  '&:hover': { borderColor: ACCENT, bgcolor: ACCENT_BG },
+                }}>
+                  <Box>
+                    <Typography sx={{ fontWeight: 600, fontSize: '0.9rem', color: '#2C2C2A' }}>{r.label}</Typography>
+                    <Typography sx={{ fontSize: '0.75rem', color: '#888780', mt: 0.25 }}>{r.desc}</Typography>
+                  </Box>
+                  <Button
+                    variant="contained" disableElevation fullWidth
+                    startIcon={descargando === r.key
+                      ? <CircularProgress size={14} color="inherit" />
+                      : <DownloadOutlinedIcon sx={{ fontSize: 16 }} />
+                    }
+                    disabled={descargando !== null}
+                    onClick={() => void handleDescargar(r.key, r.fn)}
+                    sx={{
+                      bgcolor: ACCENT, borderRadius: 2, fontWeight: 600, fontSize: '0.82rem',
+                      '&:hover': { bgcolor: '#2E4A7A' },
+                      '&.Mui-disabled': { bgcolor: '#E3E1DB', color: '#B4B2A9' },
+                    }}
+                  >
+                    {descargando === r.key ? 'Generando...' : 'Descargar'}
+                  </Button>
+                </Box>
+              </Grid>
+            ))}
+          </Grid>
+        </CardContent>
+      </Card>
 
       {/* Métricas */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <MetricaCard
-            label="Ventas totales"
-            value={loading ? '...' : formatMonto(totalVentas)}
-            icon={<BarChartOutlinedIcon sx={{ fontSize: 18 }} />}
-            iconBg={ACCENT_BG} iconColor={ACCENT}
-          />
+          <MetricaCard label="Ventas totales" value={loading ? '...' : formatMonto(totalVentas)}
+            icon={<BarChartOutlinedIcon sx={{ fontSize: 18 }} />} iconBg={ACCENT_BG} iconColor={ACCENT} />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <MetricaCard
-            label="Transacciones"
-            value={loading ? '...' : String(ventas.length)}
-            icon={<ReceiptOutlinedIcon sx={{ fontSize: 18 }} />}
-            iconBg="#E8F5E9" iconColor="#2E7D32"
-          />
+          <MetricaCard label="Transacciones" value={loading ? '...' : String(ventas.length)}
+            icon={<ReceiptOutlinedIcon sx={{ fontSize: 18 }} />} iconBg="#E8F5E9" iconColor="#2E7D32" />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <MetricaCard
-            label="Ticket promedio"
-            value={loading ? '...' : formatMonto(ticketPromedio)}
+          <MetricaCard label="Ticket promedio" value={loading ? '...' : formatMonto(ticketPromedio)}
             sub={`${ventas.length} venta${ventas.length !== 1 ? 's' : ''} en el período`}
-            icon={<ShoppingBagOutlinedIcon sx={{ fontSize: 18 }} />}
-            iconBg="#FFF3E0" iconColor="#E65100"
-          />
+            icon={<ShoppingBagOutlinedIcon sx={{ fontSize: 18 }} />} iconBg="#FFF3E0" iconColor="#E65100" />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <MetricaCard
-            label="Stock crítico"
-            value={loading ? '...' : String(productosStockBajo.length)}
+          <MetricaCard label="Stock crítico" value={loading ? '...' : String(productosStockBajo.length)}
             sub="Productos bajo mínimo"
             icon={<WarningAmberOutlinedIcon sx={{ fontSize: 18 }} />}
             iconBg={productosStockBajo.length > 0 ? '#FFEBEE' : '#E8F5E9'}
-            iconColor={productosStockBajo.length > 0 ? '#C62828' : '#2E7D32'}
-          />
+            iconColor={productosStockBajo.length > 0 ? '#C62828' : '#2E7D32'} />
         </Grid>
       </Grid>
 
@@ -322,7 +393,7 @@ export default function ReportesPage() {
                   <CircularProgress size={24} sx={{ color: ACCENT }} />
                 </Box>
               ) : mediosPago.length === 0 ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4, gap: 1 }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4 }}>
                   <Typography sx={{ color: '#B4B2A9', fontSize: '0.9rem' }}>Sin datos</Typography>
                 </Box>
               ) : (
@@ -376,7 +447,7 @@ export default function ReportesPage() {
                   <CircularProgress size={24} sx={{ color: ACCENT }} />
                 </Box>
               ) : topProductos.length === 0 ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4, gap: 1 }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4 }}>
                   <Typography sx={{ color: '#B4B2A9', fontSize: '0.9rem' }}>Sin ventas en el período</Typography>
                 </Box>
               ) : topProductos.map((p, i) => (

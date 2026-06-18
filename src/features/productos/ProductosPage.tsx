@@ -24,11 +24,11 @@ const ACCENT = '#3B5B8C';
 const ACCENT_BG = '#EEF2F8';
 
 const IVA_OPTIONS = [
-  { value: 'EXENTO',       label: 'Exento' },
-  { value: 'CERO',         label: '0%' },
+  { value: 'EXENTO', label: 'Exento' },
+  { value: 'CERO', label: '0%' },
   { value: 'DIEZ_Y_MEDIO', label: '10,5%' },
-  { value: 'VEINTIUNO',    label: '21%' },
-  { value: 'VEINTISIETE',  label: '27%' },
+  { value: 'VEINTIUNO', label: '21%' },
+  { value: 'VEINTISIETE', label: '27%' },
 ];
 
 const emptyForm: ProductoRequest = {
@@ -166,34 +166,34 @@ export default function ProductosPage() {
 
   // ── Carga rápida ──
   const procesarInputCarga = async () => {
-  if (!inputCarga.trim()) return;
-  setBuscandoCarga(true);
-  setResultadoCarga({ tipo: null });
-  try {
-    let cantidad = 1;
-    let codigoBusqueda = inputCarga.trim();
-    if (inputCarga.includes('*')) {
-      const [cantStr, cod] = inputCarga.split('*');
-      cantidad = parseInt(cantStr) || 1;
-      codigoBusqueda = cod.trim();
+    if (!inputCarga.trim()) return;
+    setBuscandoCarga(true);
+    setResultadoCarga({ tipo: null });
+    try {
+      let cantidad = 1;
+      let codigoBusqueda = inputCarga.trim();
+      if (inputCarga.includes('*')) {
+        const [cantStr, cod] = inputCarga.split('*');
+        cantidad = parseInt(cantStr) || 1;
+        codigoBusqueda = cod.trim();
+      }
+      const res = await listarProductos(codigoBusqueda, undefined, 0, 10);
+      const resultados = res.data.data.content;
+
+      // Primero buscamos código exacto, si no tomamos el primero
+      const encontrado = resultados.find(p => p.codigo === codigoBusqueda) ?? resultados[0];
+
+      if (encontrado) {
+        setResultadoCarga({ tipo: 'ok', producto: encontrado, cantidad });
+      } else {
+        setResultadoCarga({ tipo: 'nuevo', codigo: codigoBusqueda, cantidad });
+      }
+    } catch {
+      setError('Error al buscar producto');
+    } finally {
+      setBuscandoCarga(false);
     }
-    const res = await listarProductos(codigoBusqueda, undefined, 0, 10);
-    const resultados = res.data.data.content;
-    
-    // Primero buscamos código exacto, si no tomamos el primero
-    const encontrado = resultados.find(p => p.codigo === codigoBusqueda) ?? resultados[0];
-    
-    if (encontrado) {
-      setResultadoCarga({ tipo: 'ok', producto: encontrado, cantidad });
-    } else {
-      setResultadoCarga({ tipo: 'nuevo', codigo: codigoBusqueda, cantidad });
-    }
-  } catch {
-    setError('Error al buscar producto');
-  } finally {
-    setBuscandoCarga(false);
-  }
-};
+  };
 
   const confirmarAjusteCarga = async () => {
     if (!resultadoCarga.producto || !resultadoCarga.cantidad) return;

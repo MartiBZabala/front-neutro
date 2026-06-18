@@ -8,17 +8,19 @@ import PrintOutlinedIcon from '@mui/icons-material/PrintOutlined';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import PointOfSaleOutlinedIcon from '@mui/icons-material/PointOfSaleOutlined';
 import BadgeOutlinedIcon from '@mui/icons-material/BadgeOutlined';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import { buscarProductos, agregarItem, cobrarVenta, crearVenta } from '../../api/ventaApi';
 import { getComprobantePorVenta, descargarYAbrirPdf } from '../../api/facturacionApi';
-import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import type { ProductoResponse } from '../../types/producto';
 import type { VentaResponse } from '../../types/venta';
 import type { MedioPago } from '../../types/medioPago';
 import type { PersonaResponse } from '../../types/personas';
 import { buscarPersonas } from '../../api/personasApi';
-import { abrirCaja, miTurnoActual } from '../../api/cajaApi';
+import { abrirCaja, miTurnoActual, arquearCaja, confirmarCierre } from '../../api/cajaApi';
 import { getCCPorPersona } from '../../api/cuentaCorrienteApi';
 import type { CCResponse } from '../../types/cuentaCorriente';
+import { generarPdfCierre } from '../../utils/reporteCierre';
 
 const ACCENT = '#3B5B8C';
 const ACCENT_BG = '#EEF2F8';
@@ -53,6 +55,7 @@ export default function CajaVentaPage() {
   const [abriendo, setAbriendo] = useState(false);
   const [cajeroNombre, setCajeroNombre] = useState('');
   const [verificandoTurno, setVerificandoTurno] = useState(true);
+  const [turnoActualId, setTurnoActualId] = useState<number | null>(null);
 
   const [codigo, setCodigo] = useState('');
   const [sugerencias, setSugerencias] = useState<ProductoResponse[]>([]);
@@ -74,6 +77,7 @@ export default function CajaVentaPage() {
   const [buscandoCC, setBuscandoCC] = useState(false);
   const [errorCC, setErrorCC] = useState<string | null>(null);
 
+  // Ticket
   const [dialogTicket, setDialogTicket] = useState(false);
   const [ventaCobrada, setVentaCobrada] = useState<VentaResponse | null>(null);
   const [vueltoFinal, setVueltoFinal] = useState(0);
@@ -81,6 +85,15 @@ export default function CajaVentaPage() {
   const [montoRecibidoFinal, setMontoRecibidoFinal] = useState('');
   const [comprobanteId, setComprobanteId] = useState<number | null>(null);
   const [descargandoPdf, setDescargandoPdf] = useState(false);
+
+  // Cierre de caja
+  const [dialogCierre, setDialogCierre] = useState(false);
+  const [arqueo, setArqueo] = useState({
+    efectivo: '', tarjetaDebito: '', tarjetaCredito: '',
+    transferencia: '', cuentaCorriente: '', qr: '',
+  });
+  const [cerrandoCaja, setCerrandoCaja] = useState(false);
+  const [errorCierre, setErrorCierre] = useState<string | null>(null);
 
   const total = venta?.total ?? 0;
   const vuelto = medio === 'EFECTIVO' && montoRecibido
@@ -107,6 +120,7 @@ export default function CajaVentaPage() {
         const turno = res.data.data;
         if (activo && turno) {
           setCajeroNombre(turno.nombreUsuario);
+          setTurnoActualId(turno.id);
           setPaso('abierta');
         }
       } catch {
@@ -156,10 +170,59 @@ export default function CajaVentaPage() {
     setAbriendo(true);
     setError(null);
     try {
-      await abrirCaja(Number(fondoInicial));
+      const res = await abrirCaja(Number(fondoInicial));
+      setTurnoActualId(res.data.data.id);
       setPaso('abierta');
     } catch { setError('Error al abrir caja. Verificá que no haya un turno ya abierto.'); }
     finally { setAbriendo(false); }
+  };
+
+  const handleCerrarCaja = async () => {
+    if (!turnoActualId) return;
+    setCerrandoCaja(true);
+    setErrorCierre(null);
+    try {
+      const req = {
+        efectivo: Number(arqueo.efectivo) || 0,
+        tarjetaDebito: Number(arqueo.tarjetaDebito) || 0,
+        tarjetaCredito: Number(arqueo.tarjetaCredito) || 0,
+        transferencia: Number(arqueo.transferencia) || 0,
+        cuentaCorriente: Number(arqueo.cuentaCorriente) || 0,
+        qr: Number(arqueo.qr) || 0,
+      };
+      await arquearCaja(turnoActualId, req);
+      const res = await confirmarCierre(turnoActualId);
+      const turno = res.data.data;
+
+      generarPdfCierre({
+        turnoId: turno.id,
+        cajeroNombre: turno.nombreUsuario,
+        apertura: turno.apertura,
+        cierre: turno.cierre ?? new Date().toISOString(),
+        fondoInicial: Number(turno.fondoInicial ?? 0),
+        sistemaEfectivo: Number(turno.totalEfectivo ?? 0),
+        sistemaDebito: Number(turno.totalTarjetaDebito ?? 0),
+        sistemaCredito: Number(turno.totalTarjetaCredito ?? 0),
+        sistemaTransferencia: Number(turno.totalTransferencia ?? 0),
+        sistemaCC: Number(turno.totalCC ?? 0),
+        contadoEfectivo: req.efectivo,
+        contadoDebito: req.tarjetaDebito,
+        contadoCredito: req.tarjetaCredito,
+        contadoTransferencia: req.transferencia,
+        contadoCC: req.cuentaCorriente,
+        diferencia: Number(turno.diferencia ?? 0),
+      });
+
+      setDialogCierre(false);
+      setTurnoActualId(null);
+      setArqueo({ efectivo: '', tarjetaDebito: '', tarjetaCredito: '', transferencia: '', cuentaCorriente: '', qr: '' });
+      setPaso('dni');
+      setDni('');
+      setEmpleado(null);
+      setCajeroNombre('');
+      setVenta(null);
+    } catch { setErrorCierre('Error al cerrar la caja. Intentá de nuevo.'); }
+    finally { setCerrandoCaja(false); }
   };
 
   const buscarCC = async () => {
@@ -241,7 +304,6 @@ export default function CajaVentaPage() {
       setMedioFinal(medio);
       setMontoRecibidoFinal(montoRecibido);
       setVentaCobrada(res.data.data);
-      // Intentar obtener el comprobante autorizado para habilitar descarga PDF
       try {
         const compRes = await getComprobantePorVenta(venta.id);
         if (compRes.data.data.estado === 'AUTORIZADO') {
@@ -249,9 +311,7 @@ export default function CajaVentaPage() {
         } else {
           setComprobanteId(null);
         }
-      } catch {
-        setComprobanteId(null);
-      }
+      } catch { setComprobanteId(null); }
       setDialogTicket(true);
       setVenta(null);
       setMontoRecibido('');
@@ -280,11 +340,8 @@ export default function CajaVentaPage() {
     setDescargandoPdf(true);
     try {
       await descargarYAbrirPdf(comprobanteId);
-    } catch {
-      setError('Error al descargar la factura PDF');
-    } finally {
-      setDescargandoPdf(false);
-    }
+    } catch { setError('Error al descargar la factura PDF'); }
+    finally { setDescargandoPdf(false); }
   };
 
   if (verificandoTurno) {
@@ -395,6 +452,12 @@ export default function CajaVentaPage() {
                 <Chip label={`${venta.items.reduce((a, i) => a + i.cantidad, 0)} ítem${venta.items.length !== 1 ? 's' : ''}`}
                   size="small" sx={{ bgcolor: ACCENT_BG, color: ACCENT, fontWeight: 600, fontSize: '0.75rem', height: 22, borderRadius: 1.5, border: 'none' }} />
               )}
+              <Button variant="outlined" size="small" startIcon={<LockOutlinedIcon sx={{ fontSize: 15 }} />}
+                onClick={() => setDialogCierre(true)}
+                sx={{ borderColor: '#E3E1DB', borderRadius: 2, color: '#888780', fontSize: '0.78rem', fontWeight: 600, textTransform: 'none',
+                  '&:hover': { borderColor: '#C62828', color: '#C62828', bgcolor: '#FFEBEE' } }}>
+                Cerrar caja
+              </Button>
             </Box>
           </Box>
 
@@ -564,6 +627,65 @@ export default function CajaVentaPage() {
         </Card>
       </Box>
 
+      {/* Dialog — Cierre de caja */}
+      <Dialog open={dialogCierre} onClose={() => !cerrandoCaja && setDialogCierre(false)}
+        maxWidth="sm" fullWidth slotProps={{ paper: { sx: { borderRadius: 3 } } }}>
+        <DialogTitle sx={{ fontWeight: 700, fontSize: '1.1rem', pb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <LockOutlinedIcon sx={{ fontSize: 20, color: '#C62828' }} />
+            Cierre de caja — Turno #{turnoActualId}
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Typography sx={{ fontSize: '0.85rem', color: '#888780', mb: 2 }}>
+            Ingresá los montos contados físicamente en caja. Se comparará con lo registrado en el sistema.
+          </Typography>
+          {errorCierre && <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>{errorCierre}</Alert>}
+          <Grid container spacing={2}>
+            {[
+              { key: 'efectivo',        label: 'Efectivo en caja ($)' },
+              { key: 'tarjetaDebito',   label: 'Tarjeta débito ($)' },
+              { key: 'tarjetaCredito',  label: 'Tarjeta crédito ($)' },
+              { key: 'transferencia',   label: 'Transferencias ($)' },
+              { key: 'cuentaCorriente', label: 'Cuenta corriente ($)' },
+              { key: 'qr',              label: 'QR / Billetera digital ($)' },
+            ].map((f) => (
+              <Grid size={{ xs: 12, sm: 6 }} key={f.key}>
+                <TextField fullWidth size="small" label={f.label} type="number"
+                  value={arqueo[f.key as keyof typeof arqueo]}
+                  onChange={(e) => setArqueo(a => ({ ...a, [f.key]: e.target.value }))}
+                  sx={fieldSx} />
+              </Grid>
+            ))}
+          </Grid>
+          {Object.values(arqueo).some(v => v !== '') && (() => {
+            const totalContado = Object.values(arqueo).reduce((acc, v) => acc + (Number(v) || 0), 0);
+            return (
+              <Box sx={{ mt: 2, p: 1.5, bgcolor: '#F4F3F1', borderRadius: 2 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography sx={{ fontSize: '0.85rem', color: '#888780' }}>Total contado</Typography>
+                  <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: '#2C2C2A' }}>
+                    ${totalContado.toLocaleString('es-AR')}
+                  </Typography>
+                </Box>
+              </Box>
+            );
+          })()}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+          <Button onClick={() => setDialogCierre(false)} disabled={cerrandoCaja}
+            sx={{ color: '#888780', borderRadius: 2 }}>Cancelar</Button>
+          <Button variant="contained" disableElevation onClick={() => void handleCerrarCaja()}
+            disabled={cerrandoCaja}
+            sx={{ bgcolor: '#C62828', borderRadius: 2, fontWeight: 600, px: 3, '&:hover': { bgcolor: '#B71C1C' } }}>
+            {cerrandoCaja
+              ? <><CircularProgress size={16} color="inherit" sx={{ mr: 1 }} />Cerrando...</>
+              : 'Cerrar caja y generar PDF'
+            }
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Dialog — Cuenta corriente */}
       <Dialog open={dialogCC} onClose={() => { setDialogCC(false); if (!cuentaCorriente) setMedio('EFECTIVO'); }}
         maxWidth="xs" fullWidth slotProps={{ paper: { sx: { borderRadius: 3 } } }}>
@@ -581,9 +703,7 @@ export default function CajaVentaPage() {
               {buscandoCC ? <CircularProgress size={16} /> : 'Buscar'}
             </Button>
           </Box>
-
           {errorCC && <Alert severity="error" sx={{ mb: 1.5, borderRadius: 2 }}>{errorCC}</Alert>}
-
           {cuentaCorriente && (
             <Box sx={{ border: '1px solid #E3E1DB', borderRadius: 2, overflow: 'hidden' }}>
               <Box sx={{ p: 1.5, bgcolor: ACCENT_BG }}>
@@ -689,13 +809,10 @@ export default function CajaVentaPage() {
           <Button variant="outlined" startIcon={<PrintOutlinedIcon />} onClick={() => window.print()}
             sx={{ borderColor: '#E3E1DB', borderRadius: 2, color: '#3C3B38' }}>Imprimir</Button>
           {comprobanteId && (
-            <Button
-              variant="outlined"
+            <Button variant="outlined"
               startIcon={descargandoPdf ? <CircularProgress size={14} /> : <PictureAsPdfOutlinedIcon />}
-              onClick={() => void handleDescargarFactura()}
-              disabled={descargandoPdf}
-              sx={{ borderColor: ACCENT, color: ACCENT, borderRadius: 2, fontWeight: 600, '&:hover': { bgcolor: ACCENT_BG, borderColor: ACCENT } }}
-            >
+              onClick={() => void handleDescargarFactura()} disabled={descargandoPdf}
+              sx={{ borderColor: ACCENT, color: ACCENT, borderRadius: 2, fontWeight: 600, '&:hover': { bgcolor: ACCENT_BG, borderColor: ACCENT } }}>
               Factura PDF
             </Button>
           )}

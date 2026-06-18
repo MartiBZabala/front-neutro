@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ArqueoRequest, TurnoCajaResponse } from '../types/caja';
+import type { ArqueoRequest } from '../types/caja';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
 
@@ -18,6 +18,22 @@ api.interceptors.request.use((config) => {
 export const abrirCaja = (fondoInicial: number) =>
   api.post<{ data: TurnoCajaResponse }>('/api/caja/abrir', null, { params: { fondoInicial } });
 
+export interface TurnoCajaResponse {
+  id: number;
+  usuarioId: number;
+  nombreUsuario: string;
+  apertura: string;
+  cierre: string | null;
+  fondoInicial: number;
+  totalEfectivo: number;
+  totalTarjetaDebito: number;
+  totalTarjetaCredito: number;
+  totalTransferencia: number;
+  totalCC: number;
+  diferencia: number | null;
+  estado: string;
+}
+
 /**
  * Devuelve el turno ABIERTO del usuario actual, o null si no tiene ninguno.
  */
@@ -35,3 +51,12 @@ export const aprobarArqueo = (id: number, diferencia = 0) =>
 
 export const listarPendientes = () =>
   api.get<{ data: TurnoCajaResponse[] }>('/api/caja/pendientes');
+export const arquearCaja = (id: number, req: {
+  efectivo: number; tarjetaDebito: number; tarjetaCredito: number;
+  transferencia: number; cuentaCorriente: number; qr: number;
+}) => api.post<{ data: TurnoCajaResponse }>(`/api/caja/${id}/arqueo`, req);
+
+export const confirmarCierre = (id: number, observaciones?: string) =>
+  api.post<{ data: TurnoCajaResponse }>(`/api/caja/${id}/confirmar`, null, {
+    params: observaciones ? { observaciones } : {},
+  });
