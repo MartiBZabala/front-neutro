@@ -10,9 +10,9 @@ import FacturacionPage from '../features/facturacion/FacturacionPage';
 import ReportesPage from '../features/reportes/ReportesPage';
 import AuditoriaPage from '../features/auditoria/AuditoriaPage';
 import { useAuthStore } from '../store/authStore';
-import CuentaCorrientePage from '../features/cuentacorriente/CuenteCorrientePage';
 import PrivateRoute from './PrivateRoute';
 import CajaVentaLayout from '../components/layout/CajaVentaLayout';
+import CuentaCorrientePage from '../features/cuentacorriente/CuentaCorrientePage';
 
 function RoleRouter() {
   const user = useAuthStore((s) => s.user);

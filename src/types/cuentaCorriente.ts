@@ -5,7 +5,8 @@ export type TipoMovimientoCC =
   | 'PAGO_EFECTIVO'
   | 'PAGO_TRANSFERENCIA'
   | 'DESCUENTO_SUELDO'
-  | 'AJUSTE_ADMIN';
+  | 'AJUSTE_ADMIN'
+  | 'NOTA_CREDITO';
 
 export interface CCResponse {
   id: number;

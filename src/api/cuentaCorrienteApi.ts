@@ -13,8 +13,15 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+export const listarCuentasCorrientes = () =>
+  api.get<{ data: CCResponse[] }>('/api/cuentas-corrientes');
+
 export const getCCPorPersona = (personaId: number) =>
   api.get<{ data: CCResponse }>(`/api/cuentas-corrientes/${personaId}`);
+
+export const crearCC = (personaId: number, limite?: number) =>
+  api.post<{ data: CCResponse }>(`/api/cuentas-corrientes/${personaId}`, null,
+    limite != null ? { params: { limite } } : {});
 
 export const registrarPago = (personaId: number, req: PagoRequest) =>
   api.post<{ data: CCResponse }>(`/api/cuentas-corrientes/${personaId}/pago`, req);
