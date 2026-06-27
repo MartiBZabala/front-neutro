@@ -8,8 +8,8 @@ import TrendingDownOutlinedIcon from '@mui/icons-material/TrendingDownOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
 import { useNavigate } from 'react-router-dom';
-import { listarVentas } from '../../api/ventaApi';
-import { listarProductos } from '../../api/productoApi';
+import { listarVentas, obtenerResumenDiario, type ResumenDiarioResponse } from '../../api/ventaApi';
+import { listarStockBajo } from '../../api/productoApi';
 import type { VentaResponse } from '../../types/venta';
 
 const ACCENT = '#3B5B8C';
@@ -26,42 +26,48 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [ventasHoy, setVentasHoy] = useState<VentaResponse[]>([]);
+  const [resumen, setResumen] = useState<ResumenDiarioResponse | null>(null);
   const [stockBajo, setStockBajo] = useState(0);
-  
 
   useEffect(() => {
-  const ahora = new Date();
-  const offset = ahora.getTimezoneOffset() * 60000;
-  const local = new Date(ahora.getTime() - offset);
-  const hoy = local.toISOString().split('T')[0];
-  
-  void Promise.all([
-    listarVentas(`${hoy}T07:30:00`, `${hoy}T23:59:59`, 0, 100),
-    listarProductos(undefined, undefined, 0, 200),
-  ]).then(([ventasRes, prodRes]) => {
-    setVentasHoy(ventasRes.data.data.content);
-    setStockBajo(prodRes.data.data.content.filter((p) => p.stockBajo).length);
-  }).finally(() => setLoading(false));
-}, []);
+    const init = async () => {
+      const ahora = new Date();
+      const offset = ahora.getTimezoneOffset() * 60000;
+      const local = new Date(ahora.getTime() - offset);
+      const hoy = local.toISOString().split('T')[0];
+      try {
+        const [ventasRes, resumenRes, stockRes] = await Promise.all([
+          listarVentas(`${hoy}T00:00:00`, `${hoy}T23:59:59`, 0, 5),
+          obtenerResumenDiario(`${hoy}T00:00:00`, `${hoy}T23:59:59`),
+          listarStockBajo(),
+        ]);
+        setVentasHoy(ventasRes.data.data.content);
+        setResumen(resumenRes.data.data);
+        setStockBajo(stockRes.data.data.length);
+      } catch {
+        // silencioso
+      } finally {
+        setLoading(false);
+      }
+    };
+    void init();
+  }, []);
 
-  const ventasCobradas = ventasHoy.filter(v => v.estado === 'PAGADA');
-  const totalHoy = ventasCobradas.reduce((acc, v) => acc + Number(v.total ?? 0), 0);
-  const ultimasVentas = [...ventasHoy]
-    .sort((a, b) => new Date(b.fechaHora).getTime() - new Date(a.fechaHora).getTime())
-    .slice(0, 5);
+  // Ya vienen ordenadas DESC del backend — no hace falta sort local
+  const ultimasVentas = ventasHoy.slice(0, 5);
 
 
   const metrics = [
     {
       label: 'Recaudado hoy',
-      value: loading ? '...' : `$${totalHoy.toLocaleString('es-AR')}`,
-      sub: `${ventasCobradas.length} venta${ventasCobradas.length !== 1 ? 's' : ''} cobrada${ventasCobradas.length !== 1 ? 's' : ''}`,
+      value: loading ? '...' : `$${Number(resumen?.totalRecaudado ?? 0).toLocaleString('es-AR')}`,
+      sub: `${resumen?.ventasCobradas ?? 0} venta${(resumen?.ventasCobradas ?? 0) !== 1 ? 's' : ''} cobrada${(resumen?.ventasCobradas ?? 0) !== 1 ? 's' : ''}`,
       trend: 'up',
       icon: <TrendingUpOutlinedIcon sx={{ fontSize: 18 }} />,
     },
     {
       label: 'Transacciones hoy',
-      value: loading ? '...' : ventasHoy.length,
+      value: loading ? '...' : (resumen?.totalVentas ?? 0),
       sub: 'Total del día',
       trend: 'up',
       icon: <TrendingUpOutlinedIcon sx={{ fontSize: 18 }} />,
@@ -77,9 +83,9 @@ export default function DashboardPage() {
     },
     {
       label: 'Anuladas hoy',
-      value: loading ? '...' : ventasHoy.filter(v => v.estado === 'ANULADA').length,
-      sub: 'Del día actual',
-      trend: ventasHoy.filter(v => v.estado === 'ANULADA').length > 0 ? 'down' : 'neutral',
+      value: loading ? '...' : (resumen?.ventasAnuladas ?? 0),
+      sub: (resumen?.ventasAnuladas ?? 0) > 0 ? 'Revisar en Ventas' : 'Sin anulaciones',
+      trend: (resumen?.ventasAnuladas ?? 0) > 0 ? 'down' : 'neutral',
       icon: <TrendingDownOutlinedIcon sx={{ fontSize: 18 }} />,
     },
   ];

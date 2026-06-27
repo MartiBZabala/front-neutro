@@ -46,3 +46,25 @@ export const buscarProductos = (q: string) =>
   api.get<{ data: PagedResponse<ProductoResponse> }>('/api/productos', {
     params: { busqueda: q, page: 0, size: 10 },
   });
+
+export interface ResumenDiarioResponse {
+  totalVentas: number;
+  ventasCobradas: number;
+  ventasAnuladas: number;
+  totalRecaudado: number;
+  totalEfectivo: number;
+  totalDebito: number;
+  totalCredito: number;
+  totalTransferencia: number;
+  totalCC: number;
+  totalQR: number;
+}
+
+/** KPIs reales del día — calculados en el backend con agregaciones SQL */
+export const obtenerResumenDiario = (desde?: string, hasta?: string) =>
+  api.get<{ data: ResumenDiarioResponse }>('/api/ventas/resumen-diario', {
+    params: {
+      ...(desde ? { desde } : {}),
+      ...(hasta ? { hasta } : {}),
+    },
+  });
