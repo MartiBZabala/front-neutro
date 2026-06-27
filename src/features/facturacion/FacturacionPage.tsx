@@ -4,7 +4,7 @@ import {
   Table, TableHead, TableRow, TableCell, TableBody,
   IconButton, Tooltip, CircularProgress,
   Dialog, DialogTitle, DialogContent, DialogActions,
-  Tabs, Tab, TextField,
+  Tabs, Tab, TextField, TablePagination,
 } from '@mui/material';
 import ReplayOutlinedIcon from '@mui/icons-material/ReplayOutlined';
 import ReceiptOutlinedIcon from '@mui/icons-material/ReceiptOutlined';
@@ -49,15 +49,21 @@ export default function FacturacionPage() {
   const [buscando, setBuscando] = useState(false);
   const [descargando, setDescargando] = useState<number | null>(null);
 
+  // Paginación — solo aplica al tab "todos"
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(50);
+  const [totalElements, setTotalElements] = useState(0);
+
   useEffect(() => {
     const init = async () => {
       setLoading(true);
       try {
         const [todosRes, rechazadosRes] = await Promise.all([
-          listarTodos(),
+          listarTodos(0, 50),
           listarRechazados(),
         ]);
-        setComprobantes(todosRes.data.data);
+        setComprobantes(todosRes.data.data.content);
+        setTotalElements(todosRes.data.data.totalElements);
         setRechazados(rechazadosRes.data.data);
       } catch {
         setError('Error al cargar comprobantes');
@@ -71,10 +77,11 @@ export default function FacturacionPage() {
   const cargarRechazados = async () => {
     try {
       const [todosRes, rechazadosRes] = await Promise.all([
-        listarTodos(),
+        listarTodos(page, rowsPerPage),
         listarRechazados(),
       ]);
-      setComprobantes(todosRes.data.data);
+      setComprobantes(todosRes.data.data.content);
+      setTotalElements(todosRes.data.data.totalElements);
       setRechazados(rechazadosRes.data.data);
     } catch {
       setError('Error al cargar rechazados');
@@ -183,7 +190,7 @@ export default function FacturacionPage() {
             <Box>
               <Typography sx={{ fontSize: '0.82rem', color: '#888780', fontWeight: 500 }}>Total comprobantes</Typography>
               <Typography sx={{ fontSize: '1.8rem', fontWeight: 700, color: '#2C2C2A', lineHeight: 1.2, mt: 0.5 }}>
-                {loading ? '...' : comprobantes.length}
+                {loading ? '...' : totalElements}
               </Typography>
             </Box>
             <Box sx={{ bgcolor: ACCENT_BG, color: ACCENT, borderRadius: 2, p: 1, display: 'flex' }}>
@@ -252,7 +259,7 @@ export default function FacturacionPage() {
           '& .MuiTabs-indicator': { bgcolor: ACCENT, height: 3, borderRadius: 2 },
         }}
       >
-        <Tab value="todos" label={`Todos (${comprobantes.length})`} />
+        <Tab value="todos" label={`Todos (${totalElements})`} />
         <Tab value="autorizados" label={`Autorizados (${totalAutorizados})`} />
         <Tab value="rechazados" label={`Rechazados${rechazados.length > 0 ? ` (${rechazados.length})` : ''}`} />
       </Tabs>
@@ -388,6 +395,47 @@ export default function FacturacionPage() {
           </Table>
         )}
       </Card>
+
+      {/* Paginación — solo tab "todos" */}
+      {tab === 'todos' && !loading && totalElements > 0 && (
+        <TablePagination
+          component="div"
+          count={totalElements}
+          page={page}
+          rowsPerPage={rowsPerPage}
+          onPageChange={async (_, newPage) => {
+            setPage(newPage);
+            setLoading(true);
+            try {
+              const res = await listarTodos(newPage, rowsPerPage);
+              setComprobantes(res.data.data.content);
+            } catch { setError('Error al cargar comprobantes'); }
+            finally { setLoading(false); }
+          }}
+          onRowsPerPageChange={async (e) => {
+            const size = parseInt(e.target.value, 10);
+            setRowsPerPage(size);
+            setPage(0);
+            setLoading(true);
+            try {
+              const res = await listarTodos(0, size);
+              setComprobantes(res.data.data.content);
+              setTotalElements(res.data.data.totalElements);
+            } catch { setError('Error al cargar comprobantes'); }
+            finally { setLoading(false); }
+          }}
+          rowsPerPageOptions={[25, 50, 100]}
+          labelRowsPerPage="Filas por página:"
+          labelDisplayedRows={({ from, to, count }) =>
+            `${from}–${to} de ${count.toLocaleString('es-AR')}`}
+          sx={{
+            mt: 1,
+            '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': {
+              fontSize: '0.8rem', color: '#888780',
+            },
+          }}
+        />
+      )}
 
       {/* Dialog — Detalle */}
       <Dialog open={dialogDetalle} onClose={() => setDialogDetalle(false)} maxWidth="sm" fullWidth

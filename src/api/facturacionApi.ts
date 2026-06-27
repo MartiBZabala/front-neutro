@@ -1,5 +1,6 @@
 import axios from 'axios';
 import type { ComprobanteResponse } from '../types/facturacion';
+import type { PagedResponse } from './productoApi';
 
 const api = axios.create({ baseURL: import.meta.env.VITE_API_URL ?? 'http://localhost:8080' });
 
@@ -20,8 +21,10 @@ export const emitirComprobante = (ventaId: number) =>
 export const getComprobantePorVenta = (ventaId: number) =>
   api.get<{ data: ComprobanteResponse }>(`/api/comprobantes/venta/${ventaId}`);
 
-export const listarTodos = () =>
-  api.get<{ data: ComprobanteResponse[] }>("/api/comprobantes");
+export const listarTodos = (page = 0, size = 50) =>
+  api.get<{ data: PagedResponse<ComprobanteResponse> }>('/api/comprobantes', {
+    params: { page, size },
+  });
 
 export const listarRechazados = () =>
   api.get<{ data: ComprobanteResponse[] }>('/api/comprobantes/rechazados');
