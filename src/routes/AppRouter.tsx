@@ -13,6 +13,7 @@ import { useAuthStore } from '../store/authStore';
 import PrivateRoute from './PrivateRoute';
 import CajaVentaLayout from '../components/layout/CajaVentaLayout';
 import CuentaCorrientePage from '../features/cuentacorriente/CuentaCorrientePage';
+import AdminCajaPage from '../features/caja/AdminCajaPage';
 
 function RoleRouter() {
   const user = useAuthStore((s) => s.user);
@@ -35,6 +36,7 @@ export default function AppRouter() {
           <Route path="/personas" element={<PersonasPage />} />
           <Route path="/facturacion" element={<FacturacionPage />} />
           <Route path="/cta-corriente" element={<CuentaCorrientePage />} />
+          <Route path="/admin-caja" element={<AdminCajaPage />} />
           <Route path="/reportes" element={<ReportesPage />} />
           <Route path="/auditoria" element={<AuditoriaPage />} />
         </Route>

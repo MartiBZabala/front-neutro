@@ -17,6 +17,7 @@ import MenuIcon from '@mui/icons-material/Menu';
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
 import ShoppingCartOutlinedIcon from '@mui/icons-material/ShoppingCartOutlined';
 import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined';
+import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
 import { useAuthStore } from '../../store/authStore';
 
 const ACCENT = '#3B5B8C';
@@ -35,6 +36,7 @@ const navItems = [
   { label: 'Cta. Corriente', path: '/cta-corriente', icon: <AccountBalanceOutlinedIcon fontSize="small" />, section: 'GENERAL', roles: ['ADMIN'] },
   { label: 'Reportes',     path: '/reportes',     icon: <BarChartOutlinedIcon fontSize="small" />,       section: 'REPORTES',  roles: ['ADMIN'] },
   { label: 'Auditoría',    path: '/auditoria',    icon: <VerifiedUserOutlinedIcon fontSize="small" />,   section: 'REPORTES',  roles: ['ADMIN'] },
+  { label: 'Admin Caja',   path: '/admin-caja',   icon: <AdminPanelSettingsOutlinedIcon fontSize="small" />, section: 'ADMINISTRACIÓN', roles: ['ADMIN'] },
 ];
 
 export default function MainLayout() {
@@ -49,7 +51,7 @@ export default function MainLayout() {
     navigate('/login');
   };
 
-  const sections = ['GENERAL', 'REPORTES'];
+  const sections = ['GENERAL', 'REPORTES', 'ADMINISTRACIÓN'];
   const sectionesVisibles = sections.filter(section =>
   navItems.some(i => i.section === section && i.roles.includes(user?.rol ?? ''))
 );
