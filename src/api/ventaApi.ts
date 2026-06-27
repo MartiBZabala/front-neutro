@@ -22,6 +22,10 @@ export const crearVenta = (personaId?: number) =>
 export const agregarItem = (ventaId: number, req: AgregarItemRequest) =>
   api.post<{ data: VentaResponse }>(`/api/ventas/${ventaId}/items`, req);
 
+/** Quita un ítem de una venta en curso. Devuelve la venta actualizada. */
+export const quitarItem = (ventaId: number, itemId: number) =>
+  api.post<{ data: VentaResponse }>(`/api/ventas/${ventaId}/items/${itemId}/quitar`);
+
 export const cobrarVenta = (ventaId: number, req: CobrarVentaRequest) =>
   api.post<{ data: VentaResponse }>(`/api/ventas/${ventaId}/cobrar`, req);
 

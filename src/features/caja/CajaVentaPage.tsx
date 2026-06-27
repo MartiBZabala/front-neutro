@@ -3,14 +3,18 @@ import {
   Box, Card, CardContent, Typography, TextField, Button,
   Grid, Divider, Alert, CircularProgress,
   Dialog, DialogTitle, DialogContent, DialogActions, Chip,
+  IconButton, Tooltip,
 } from '@mui/material';
+import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutlined';
 import PrintOutlinedIcon from '@mui/icons-material/PrintOutlined';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import PointOfSaleOutlinedIcon from '@mui/icons-material/PointOfSaleOutlined';
 import BadgeOutlinedIcon from '@mui/icons-material/BadgeOutlined';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
-import { buscarProductos, agregarItem, cobrarVenta, crearVenta } from '../../api/ventaApi';
+import PersonSearchOutlinedIcon from '@mui/icons-material/PersonSearchOutlined';
+import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
+import { buscarProductos, agregarItem, cobrarVenta, crearVenta, quitarItem } from '../../api/ventaApi';
 import { getComprobantePorVenta, descargarYAbrirPdf } from '../../api/facturacionApi';
 import type { ProductoResponse } from '../../types/producto';
 import type { VentaResponse } from '../../types/venta';
@@ -64,11 +68,20 @@ export default function CajaVentaPage() {
 
   const [venta, setVenta] = useState<VentaResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [quitando, setQuitando] = useState<number | null>(null); // itemId en proceso
   const [error, setError] = useState<string | null>(null);
 
   const [medio, setMedio] = useState<MedioPago>('EFECTIVO');
   const [montoRecibido, setMontoRecibido] = useState('');
   const [cobrando, setCobrando] = useState(false);
+
+  // ── Cliente para Factura A ──────────────────────────────────────────────
+  const [dialogCliente, setDialogCliente] = useState(false);
+  const [busquedaCliente, setBusquedaCliente] = useState('');
+  const [clienteSeleccionado, setClienteSeleccionado] = useState<PersonaResponse | null>(null);
+  const [buscandoCliente, setBuscandoCliente] = useState(false);
+  const [errorCliente, setErrorCliente] = useState<string | null>(null);
+  const [resultadosCliente, setResultadosCliente] = useState<PersonaResponse[]>([]);
 
   // Cuenta corriente
   const [dialogCC, setDialogCC] = useState(false);
@@ -77,7 +90,7 @@ export default function CajaVentaPage() {
   const [buscandoCC, setBuscandoCC] = useState(false);
   const [errorCC, setErrorCC] = useState<string | null>(null);
 
-  // Ticket
+  // Post-cobro
   const [dialogTicket, setDialogTicket] = useState(false);
   const [ventaCobrada, setVentaCobrada] = useState<VentaResponse | null>(null);
   const [vueltoFinal, setVueltoFinal] = useState(0);
@@ -104,6 +117,12 @@ export default function CajaVentaPage() {
       ? cuentaCorriente !== null && (cuentaCorriente.saldoActual + total) <= (cuentaCorriente.limiteCredito ?? 0)
       : true;
 
+  // Nombre de cajero — puede venir del empleado (apertura nueva) o del turno existente
+  const nombreCajero = empleado?.nombre ?? cajeroNombre;
+
+  // La venta emite Factura A si el cliente es Responsable Inscripto
+  const esFacturaA = clienteSeleccionado?.condicionIVA === 'RESPONSABLE_INSCRIPTO';
+
   const focoInput = useCallback(() => {
     setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
@@ -112,6 +131,7 @@ export default function CajaVentaPage() {
     if (paso === 'abierta') focoInput();
   }, [paso, focoInput]);
 
+  // Al montar: verificar si ya hay un turno abierto para este usuario
   useEffect(() => {
     let activo = true;
     (async () => {
@@ -124,7 +144,7 @@ export default function CajaVentaPage() {
           setPaso('abierta');
         }
       } catch {
-        // seguimos con flujo normal
+        // sin turno previo → flujo normal de apertura
       } finally {
         if (activo) setVerificandoTurno(false);
       }
@@ -132,6 +152,7 @@ export default function CajaVentaPage() {
     return () => { activo = false; };
   }, []);
 
+  // Atajos de teclado F1–F5 para medio de pago
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (paso !== 'abierta') return;
@@ -152,6 +173,8 @@ export default function CajaVentaPage() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [paso]);
+
+  // ── Apertura de caja ────────────────────────────────────────────────────
 
   const buscarEmpleado = async () => {
     if (!dni.trim()) return;
@@ -177,26 +200,26 @@ export default function CajaVentaPage() {
     finally { setAbriendo(false); }
   };
 
+  // ── Cierre de caja ──────────────────────────────────────────────────────
+
   const handleCerrarCaja = async () => {
     if (!turnoActualId) return;
     setCerrandoCaja(true);
     setErrorCierre(null);
     try {
       const req = {
-        efectivo: Number(arqueo.efectivo) || 0,
-        tarjetaDebito: Number(arqueo.tarjetaDebito) || 0,
-        tarjetaCredito: Number(arqueo.tarjetaCredito) || 0,
-        transferencia: Number(arqueo.transferencia) || 0,
+        efectivo:        Number(arqueo.efectivo)        || 0,
+        tarjetaDebito:   Number(arqueo.tarjetaDebito)   || 0,
+        tarjetaCredito:  Number(arqueo.tarjetaCredito)  || 0,
+        transferencia:   Number(arqueo.transferencia)   || 0,
         cuentaCorriente: Number(arqueo.cuentaCorriente) || 0,
-        qr: Number(arqueo.qr) || 0,
+        qr:              Number(arqueo.qr)              || 0,
       };
       await arquearCaja(turnoActualId, req);
       const res = await confirmarCierre(turnoActualId);
-      const turno = res.data.data;
+      await descargarCierreCajaPdf(res.data.data.id);
 
-      // PDF generado por el backend
-      await descargarCierreCajaPdf(turno.id);
-
+      // Reset completo
       setDialogCierre(false);
       setTurnoActualId(null);
       setArqueo({ efectivo: '', tarjetaDebito: '', tarjetaCredito: '', transferencia: '', cuentaCorriente: '', qr: '' });
@@ -205,9 +228,46 @@ export default function CajaVentaPage() {
       setEmpleado(null);
       setCajeroNombre('');
       setVenta(null);
+      setClienteSeleccionado(null);
     } catch { setErrorCierre('Error al cerrar la caja. Intentá de nuevo.'); }
     finally { setCerrandoCaja(false); }
   };
+
+  // ── Búsqueda de cliente para Factura A ─────────────────────────────────
+
+  const buscarCliente = async () => {
+    if (!busquedaCliente.trim()) return;
+    setBuscandoCliente(true);
+    setErrorCliente(null);
+    setResultadosCliente([]);
+    try {
+      const res = await buscarPersonas(busquedaCliente);
+      const clientes = res.data.data.content.filter(p => p.esCliente);
+      if (clientes.length === 0) {
+        setErrorCliente('No se encontró ningún cliente con ese dato. Registralo desde Administración → Personas.');
+      } else {
+        setResultadosCliente(clientes);
+      }
+    } catch { setErrorCliente('Error al buscar cliente'); }
+    finally { setBuscandoCliente(false); }
+  };
+
+  const confirmarCliente = (persona: PersonaResponse) => {
+    setClienteSeleccionado(persona);
+    setDialogCliente(false);
+    setBusquedaCliente('');
+    setResultadosCliente([]);
+    setErrorCliente(null);
+  };
+
+  const quitarCliente = () => {
+    setClienteSeleccionado(null);
+    // Si hay venta en curso con cliente asignado, no la podemos desasociar
+    // (el back no tiene ese endpoint), pero sí limpiamos el estado local
+    // para que la próxima venta sea sin cliente
+  };
+
+  // ── Cuenta corriente ────────────────────────────────────────────────────
 
   const buscarCC = async () => {
     if (!busquedaCC.trim()) return;
@@ -226,6 +286,8 @@ export default function CajaVentaPage() {
     finally { setBuscandoCC(false); }
   };
 
+  // ── Productos ───────────────────────────────────────────────────────────
+
   const agregarProducto = useCallback(async (producto: ProductoResponse, cantidad = 1) => {
     setSugerencias([]);
     setCodigo('');
@@ -234,14 +296,28 @@ export default function CajaVentaPage() {
     try {
       let ventaId = venta?.id;
       if (!ventaId) {
-        const res = await crearVenta();
+        // Crear la venta con el cliente seleccionado (si hay)
+        const res = await crearVenta(clienteSeleccionado?.id);
         ventaId = res.data.data.id;
       }
       const res = await agregarItem(ventaId, { productoId: producto.id, cantidad });
       setVenta(res.data.data);
     } catch { setError('Producto no encontrado o sin stock'); }
     finally { setLoading(false); focoInput(); }
-  }, [venta, focoInput]);
+  }, [venta, clienteSeleccionado, focoInput]);
+
+  const handleQuitarItem = async (itemId: number) => {
+    if (!venta) return;
+    setQuitando(itemId);
+    setError(null);
+    try {
+      const res = await quitarItem(venta.id, itemId);
+      // Si quedó sin ítems, la venta queda vacía pero existe — la reseteamos
+      const ventaActualizada = res.data.data;
+      setVenta(ventaActualizada.items.length > 0 ? ventaActualizada : null);
+    } catch { setError('Error al quitar el producto'); }
+    finally { setQuitando(null); focoInput(); }
+  };
 
   const handleEnterCodigo = async () => {
     if (!codigo.trim()) return;
@@ -275,6 +351,8 @@ export default function CajaVentaPage() {
     }
   };
 
+  // ── Cobro ───────────────────────────────────────────────────────────────
+
   const handleCobrar = async () => {
     if (!venta || !montoValido) return;
     setCobrando(true);
@@ -290,11 +368,7 @@ export default function CajaVentaPage() {
       setVentaCobrada(res.data.data);
       try {
         const compRes = await getComprobantePorVenta(venta.id);
-        if (compRes.data.data.estado === 'AUTORIZADO') {
-          setComprobanteId(compRes.data.data.id);
-        } else {
-          setComprobanteId(null);
-        }
+        setComprobanteId(compRes.data.data.estado === 'AUTORIZADO' ? compRes.data.data.id : null);
       } catch { setComprobanteId(null); }
       setDialogTicket(true);
       setVenta(null);
@@ -302,6 +376,7 @@ export default function CajaVentaPage() {
       setMedio('EFECTIVO');
       setCuentaCorriente(null);
       setBusquedaCC('');
+      // Mantener cliente seleccionado para siguiente venta del mismo cliente
     } catch { setError('Error al cobrar'); }
     finally { setCobrando(false); }
   };
@@ -322,11 +397,12 @@ export default function CajaVentaPage() {
   const handleDescargarFactura = async () => {
     if (!comprobanteId) return;
     setDescargandoPdf(true);
-    try {
-      await descargarYAbrirPdf(comprobanteId);
-    } catch { setError('Error al descargar la factura PDF'); }
+    try { await descargarYAbrirPdf(comprobanteId); }
+    catch { setError('Error al descargar la factura PDF'); }
     finally { setDescargandoPdf(false); }
   };
+
+  // ── Pantalla de carga inicial ───────────────────────────────────────────
 
   if (verificandoTurno) {
     return (
@@ -335,6 +411,8 @@ export default function CajaVentaPage() {
       </Box>
     );
   }
+
+  // ── Paso: identificación del cajero ────────────────────────────────────
 
   if (paso === 'dni') {
     return (
@@ -373,6 +451,8 @@ export default function CajaVentaPage() {
       </Box>
     );
   }
+
+  // ── Paso: fondo inicial ─────────────────────────────────────────────────
 
   if (paso === 'fondo') {
     return (
@@ -417,44 +497,57 @@ export default function CajaVentaPage() {
     );
   }
 
+  // ── Paso: caja abierta ──────────────────────────────────────────────────
+
   return (
     <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 2, height: '100%' }}>
 
-      {/* Panel izquierdo */}
+      {/* Panel izquierdo — productos */}
       <Card elevation={0} sx={{ border: '1px solid #E3E1DB', borderRadius: 3, display: 'flex', flexDirection: 'column' }}>
         <CardContent sx={{ flex: 1, p: 2.5 }}>
+
+          {/* Header del panel */}
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
             <Box>
               <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#2C2C2A' }}>Productos</Typography>
               <Typography sx={{ fontSize: '0.8rem', color: '#888780', mt: 0.25 }}>
-                Cajero: <strong style={{ color: ACCENT }}>{empleado?.nombre ?? cajeroNombre}</strong>
+                Cajero: <strong style={{ color: ACCENT }}>{nombreCajero}</strong>
               </Typography>
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               {loading && <CircularProgress size={18} sx={{ color: ACCENT }} />}
               {venta && (
-                <Chip label={`${venta.items.reduce((a, i) => a + i.cantidad, 0)} ítem${venta.items.length !== 1 ? 's' : ''}`}
-                  size="small" sx={{ bgcolor: ACCENT_BG, color: ACCENT, fontWeight: 600, fontSize: '0.75rem', height: 22, borderRadius: 1.5, border: 'none' }} />
+                <Chip
+                  label={`${venta.items.reduce((a, i) => a + i.cantidad, 0)} ítem${venta.items.length !== 1 ? 's' : ''}`}
+                  size="small"
+                  sx={{ bgcolor: ACCENT_BG, color: ACCENT, fontWeight: 600, fontSize: '0.75rem', height: 22, borderRadius: 1.5, border: 'none' }}
+                />
               )}
               <Button variant="outlined" size="small" startIcon={<LockOutlinedIcon sx={{ fontSize: 15 }} />}
                 onClick={() => setDialogCierre(true)}
-                sx={{ borderColor: '#E3E1DB', borderRadius: 2, color: '#888780', fontSize: '0.78rem', fontWeight: 600, textTransform: 'none',
-                  '&:hover': { borderColor: '#C62828', color: '#C62828', bgcolor: '#FFEBEE' } }}>
+                sx={{
+                  borderColor: '#E3E1DB', borderRadius: 2, color: '#888780',
+                  fontSize: '0.78rem', fontWeight: 600, textTransform: 'none',
+                  '&:hover': { borderColor: '#C62828', color: '#C62828', bgcolor: '#FFEBEE' },
+                }}>
                 Cerrar caja
               </Button>
             </Box>
           </Box>
 
+          {/* Buscador de productos */}
           <Box sx={{ position: 'relative', mb: 2 }}>
             <TextField inputRef={inputRef} fullWidth size="small"
               placeholder="Código de barras o nombre — Enter para buscar"
               value={codigo}
               onChange={(e) => { setCodigo(e.target.value); setSugerencias([]); setError(null); }}
               onKeyDown={handleKeyDownCodigo} disabled={loading || buscando} sx={fieldSx}
-              slotProps={{ input: {
-                startAdornment: <SearchOutlinedIcon sx={{ fontSize: 18, color: '#B4B2A9', mr: 0.5 }} />,
-                endAdornment: buscando ? <CircularProgress size={16} sx={{ color: ACCENT }} /> : null,
-              }}} />
+              slotProps={{
+                input: {
+                  startAdornment: <SearchOutlinedIcon sx={{ fontSize: 18, color: '#B4B2A9', mr: 0.5 }} />,
+                  endAdornment: buscando ? <CircularProgress size={16} sx={{ color: ACCENT }} /> : null,
+                },
+              }} />
             {sugerencias.length > 0 && (
               <Card elevation={4} sx={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20, mt: 0.5, maxHeight: 280, overflow: 'auto', borderRadius: 2 }}>
                 <Box sx={{ px: 2, py: 0.75, bgcolor: '#F4F3F1', borderBottom: '1px solid #F0EEE8' }}>
@@ -464,7 +557,8 @@ export default function CajaVentaPage() {
                   <Box key={p.id} onClick={() => void agregarProducto(p)} sx={{
                     px: 2, py: 1.2, cursor: 'pointer',
                     bgcolor: i === indiceSugerencia ? ACCENT_BG : '#fff',
-                    borderBottom: '1px solid #F0EEE8', '&:last-child': { borderBottom: 'none' }, '&:hover': { bgcolor: ACCENT_BG },
+                    borderBottom: '1px solid #F0EEE8', '&:last-child': { borderBottom: 'none' },
+                    '&:hover': { bgcolor: ACCENT_BG },
                   }}>
                     <Typography sx={{ fontSize: '0.9rem', fontWeight: 500, color: '#2C2C2A' }}>{p.nombre}</Typography>
                     <Typography sx={{ fontSize: '0.75rem', color: '#B4B2A9' }}>
@@ -478,27 +572,60 @@ export default function CajaVentaPage() {
 
           {error && <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }} onClose={() => setError(null)}>{error}</Alert>}
 
+          {/* Lista de ítems */}
           {!venta || venta.items.length === 0 ? (
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 200, gap: 1 }}>
               <SearchOutlinedIcon sx={{ fontSize: 36, color: '#D3D1C7' }} />
               <Typography sx={{ fontSize: '0.9rem', color: '#B4B2A9' }}>Escaneá un producto para comenzar</Typography>
             </Box>
           ) : venta.items.map((item) => (
-            <Box key={item.id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1.2, borderBottom: '1px solid #F0EEE8', '&:hover': { bgcolor: '#FAFAF9' } }}>
-              <Box sx={{ flex: 1 }}>
-                <Typography sx={{ fontSize: '0.9rem', fontWeight: 500, color: '#2C2C2A' }}>{item.nombreProducto}</Typography>
-                <Typography sx={{ fontSize: '0.75rem', color: '#B4B2A9' }}>{item.cantidad} × ${item.precioUnitario?.toLocaleString('es-AR')}</Typography>
+            <Box key={item.id} sx={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              py: 1, px: 0.5, borderBottom: '1px solid #F0EEE8',
+              '&:hover': { bgcolor: '#FAFAF9' },
+              '&:hover .quitar-btn': { opacity: 1 },
+            }}>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography sx={{ fontSize: '0.9rem', fontWeight: 500, color: '#2C2C2A' }} noWrap>
+                  {item.nombreProducto}
+                </Typography>
+                <Typography sx={{ fontSize: '0.75rem', color: '#B4B2A9' }}>
+                  {item.cantidad} × ${item.precioUnitario?.toLocaleString('es-AR')}
+                </Typography>
               </Box>
-              <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', color: '#2C2C2A', minWidth: 72, textAlign: 'right' }}>
-                ${item.subtotal?.toLocaleString('es-AR')}
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+                <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', color: '#2C2C2A', minWidth: 72, textAlign: 'right' }}>
+                  ${item.subtotal?.toLocaleString('es-AR')}
+                </Typography>
+                <Tooltip title="Quitar producto">
+                  <span>
+                    <IconButton
+                      className="quitar-btn"
+                      size="small"
+                      disabled={quitando === item.id}
+                      onClick={() => void handleQuitarItem(item.id)}
+                      sx={{
+                        opacity: 0, transition: 'opacity 0.15s',
+                        color: '#C62828',
+                        '&:hover': { bgcolor: '#FFEBEE' },
+                        '&.Mui-disabled': { opacity: 0.4 },
+                      }}>
+                      {quitando === item.id
+                        ? <CircularProgress size={14} color="inherit" />
+                        : <RemoveCircleOutlineIcon sx={{ fontSize: 18 }} />}
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              </Box>
             </Box>
           ))}
         </CardContent>
       </Card>
 
-      {/* Panel derecho */}
+      {/* Panel derecho — cobro */}
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+
+        {/* Resumen */}
         <Card elevation={0} sx={{ border: '1px solid #E3E1DB', borderRadius: 3 }}>
           <CardContent sx={{ p: 2.5 }}>
             <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#2C2C2A', mb: 1.5 }}>Resumen</Typography>
@@ -518,8 +645,48 @@ export default function CajaVentaPage() {
           </CardContent>
         </Card>
 
+        {/* Cobro */}
         <Card elevation={0} sx={{ border: '1px solid #E3E1DB', borderRadius: 3, flex: 1 }}>
           <CardContent sx={{ p: 2.5 }}>
+
+            {/* Selector de cliente para Factura A */}
+            <Box sx={{ mb: 2, pb: 2, borderBottom: '1px solid #F0EEE8' }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                <Typography sx={{ fontWeight: 600, fontSize: '0.88rem', color: '#2C2C2A' }}>Cliente</Typography>
+                {!clienteSeleccionado && (
+                  <Button size="small" startIcon={<PersonSearchOutlinedIcon sx={{ fontSize: 14 }} />}
+                    onClick={() => setDialogCliente(true)}
+                    sx={{ fontSize: '0.75rem', color: ACCENT, textTransform: 'none', fontWeight: 500 }}>
+                    Buscar cliente
+                  </Button>
+                )}
+              </Box>
+
+              {clienteSeleccionado ? (
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 1.25, bgcolor: esFacturaA ? '#F3E5F5' : ACCENT_BG, borderRadius: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <PersonOutlinedIcon sx={{ fontSize: 16, color: esFacturaA ? '#6A1B9A' : ACCENT }} />
+                    <Box>
+                      <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#2C2C2A' }}>
+                        {clienteSeleccionado.razonSocial ?? clienteSeleccionado.nombre}
+                      </Typography>
+                      <Typography sx={{ fontSize: '0.72rem', color: '#888780' }}>
+                        {esFacturaA ? '🧾 Factura A' : 'Factura B'} · {clienteSeleccionado.condicionIVA.replace(/_/g, ' ')}
+                      </Typography>
+                    </Box>
+                  </Box>
+                  <Button size="small" onClick={quitarCliente}
+                    sx={{ fontSize: '0.72rem', color: '#888780', textTransform: 'none', minWidth: 0 }}>
+                    Quitar
+                  </Button>
+                </Box>
+              ) : (
+                <Typography sx={{ fontSize: '0.78rem', color: '#B4B2A9' }}>
+                  Sin cliente — se emitirá Factura B (Consumidor Final)
+                </Typography>
+              )}
+            </Box>
+
             <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#2C2C2A', mb: 0.5 }}>Medio de pago</Typography>
             <Typography sx={{ fontSize: '0.78rem', color: '#B4B2A9', mb: 1.5 }}>F1–F5 para seleccionar</Typography>
 
@@ -531,10 +698,7 @@ export default function CajaVentaPage() {
                       setMedio(m.value);
                       setMontoRecibido('');
                       if (m.value === 'CUENTA_CORRIENTE') {
-                        setCuentaCorriente(null);
-                        setBusquedaCC('');
-                        setErrorCC(null);
-                        setDialogCC(true);
+                        setCuentaCorriente(null); setBusquedaCC(''); setErrorCC(null); setDialogCC(true);
                       }
                       if (m.value === 'EFECTIVO') setTimeout(() => montoRef.current?.focus(), 50);
                     }}
@@ -572,7 +736,7 @@ export default function CajaVentaPage() {
               </>
             )}
 
-            {/* Cliente CC seleccionado */}
+            {/* Cuenta corriente seleccionada */}
             {medio === 'CUENTA_CORRIENTE' && cuentaCorriente && (
               <Box sx={{ mb: 1.5, p: 1.5, bgcolor: ACCENT_BG, borderRadius: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Box>
@@ -589,7 +753,6 @@ export default function CajaVentaPage() {
                 </Button>
               </Box>
             )}
-
             {medio === 'CUENTA_CORRIENTE' && !cuentaCorriente && (
               <Box sx={{ mb: 1.5, p: 1.5, border: '1px dashed #E3E1DB', borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
                 onClick={() => setDialogCC(true)}>
@@ -604,9 +767,7 @@ export default function CajaVentaPage() {
               sx={{ py: 1.5, borderRadius: 2, fontSize: '1rem', fontWeight: 700, bgcolor: ACCENT, '&:hover': { bgcolor: '#2E4A7A' }, '&.Mui-disabled': { bgcolor: '#E3E1DB', color: '#B4B2A9' } }}>
               {cobrando ? <CircularProgress size={20} color="inherit" /> : `Cobrar $${total?.toLocaleString('es-AR')} — Enter ↵`}
             </Button>
-            <Typography sx={{ display: 'block', textAlign: 'center', fontSize: '0.75rem', color: '#B4B2A9', mt: 1 }}>
-              🖨 Se imprimirá el ticket automáticamente
-            </Typography>
+
           </CardContent>
         </Card>
       </Box>
@@ -670,6 +831,73 @@ export default function CajaVentaPage() {
         </DialogActions>
       </Dialog>
 
+      {/* Dialog — Buscar cliente (Factura A) */}
+      <Dialog open={dialogCliente} onClose={() => { setDialogCliente(false); setBusquedaCliente(''); setResultadosCliente([]); setErrorCliente(null); }}
+        maxWidth="xs" fullWidth slotProps={{ paper: { sx: { borderRadius: 3 } } }}>
+        <DialogTitle sx={{ fontWeight: 700, fontSize: '1.1rem', pb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <PersonSearchOutlinedIcon sx={{ fontSize: 20, color: ACCENT }} />
+            Buscar cliente
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Typography sx={{ fontSize: '0.82rem', color: '#888780', mb: 1.5 }}>
+            Para emitir Factura A el cliente debe ser Responsable Inscripto y estar registrado en el sistema.
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1, mb: 1.5 }}>
+            <TextField fullWidth size="small" placeholder="Nombre, CUIT o DNI" autoFocus
+              value={busquedaCliente}
+              onChange={(e) => { setBusquedaCliente(e.target.value); setResultadosCliente([]); setErrorCliente(null); }}
+              onKeyDown={(e) => e.key === 'Enter' && void buscarCliente()}
+              sx={fieldSx} />
+            <Button variant="outlined" disableElevation onClick={() => void buscarCliente()} disabled={buscandoCliente}
+              sx={{ borderColor: '#E3E1DB', borderRadius: 2, color: '#3C3B38', px: 2, minWidth: 80,
+                '&:hover': { borderColor: ACCENT, color: ACCENT, bgcolor: ACCENT_BG } }}>
+              {buscandoCliente ? <CircularProgress size={16} /> : 'Buscar'}
+            </Button>
+          </Box>
+          {errorCliente && <Alert severity="warning" sx={{ mb: 1.5, borderRadius: 2, fontSize: '0.82rem' }}>{errorCliente}</Alert>}
+          {resultadosCliente.length > 0 && (
+            <Box sx={{ border: '1px solid #E3E1DB', borderRadius: 2, overflow: 'hidden' }}>
+              {resultadosCliente.map((p, i) => (
+                <Box key={p.id}
+                  onClick={() => confirmarCliente(p)}
+                  sx={{
+                    p: 1.5, cursor: 'pointer',
+                    borderBottom: i < resultadosCliente.length - 1 ? '1px solid #F0EEE8' : 'none',
+                    '&:hover': { bgcolor: ACCENT_BG },
+                  }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <Box>
+                      <Typography sx={{ fontSize: '0.88rem', fontWeight: 600, color: '#2C2C2A' }}>
+                        {p.razonSocial ?? p.nombre}
+                      </Typography>
+                      <Typography sx={{ fontSize: '0.75rem', color: '#888780' }}>
+                        {p.cuit ? `CUIT ${p.cuit}` : p.dni ? `DNI ${p.dni}` : ''}
+                      </Typography>
+                    </Box>
+                    <Chip
+                      label={p.condicionIVA === 'RESPONSABLE_INSCRIPTO' ? 'RI' : p.condicionIVA.replace(/_/g, ' ')}
+                      size="small"
+                      sx={{
+                        fontSize: '0.7rem', height: 20, borderRadius: 1,
+                        bgcolor: p.condicionIVA === 'RESPONSABLE_INSCRIPTO' ? '#F3E5F5' : '#F4F3F1',
+                        color: p.condicionIVA === 'RESPONSABLE_INSCRIPTO' ? '#6A1B9A' : '#888780',
+                        fontWeight: 700,
+                      }}
+                    />
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+          <Button onClick={() => { setDialogCliente(false); setBusquedaCliente(''); setResultadosCliente([]); setErrorCliente(null); }}
+            sx={{ color: '#888780', borderRadius: 2 }}>Cerrar</Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Dialog — Cuenta corriente */}
       <Dialog open={dialogCC} onClose={() => { setDialogCC(false); if (!cuentaCorriente) setMedio('EFECTIVO'); }}
         maxWidth="xs" fullWidth slotProps={{ paper: { sx: { borderRadius: 3 } } }}>
@@ -696,26 +924,16 @@ export default function CajaVentaPage() {
                 </Typography>
               </Box>
               <Box sx={{ p: 1.5, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography sx={{ fontSize: '0.82rem', color: '#888780' }}>Saldo actual</Typography>
-                  <Typography sx={{ fontSize: '0.82rem', fontWeight: 600,
-                    color: cuentaCorriente.saldoActual >= (cuentaCorriente.limiteCredito ?? 0) ? '#C62828' : '#2C2C2A' }}>
-                    ${cuentaCorriente.saldoActual.toLocaleString('es-AR')}
-                  </Typography>
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography sx={{ fontSize: '0.82rem', color: '#888780' }}>Límite</Typography>
-                  <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: '#2C2C2A' }}>
-                    ${(cuentaCorriente.limiteCredito ?? 0).toLocaleString('es-AR')}
-                  </Typography>
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography sx={{ fontSize: '0.82rem', color: '#888780' }}>Disponible</Typography>
-                  <Typography sx={{ fontSize: '0.82rem', fontWeight: 700,
-                    color: ((cuentaCorriente.limiteCredito ?? 0) - cuentaCorriente.saldoActual) <= 0 ? '#C62828' : '#2E7D32' }}>
-                    ${Math.max(0, (cuentaCorriente.limiteCredito ?? 0) - cuentaCorriente.saldoActual).toLocaleString('es-AR')}
-                  </Typography>
-                </Box>
+                {[
+                  { label: 'Saldo actual', valor: `$${cuentaCorriente.saldoActual.toLocaleString('es-AR')}`, alerta: cuentaCorriente.saldoActual >= (cuentaCorriente.limiteCredito ?? 0) },
+                  { label: 'Límite', valor: `$${(cuentaCorriente.limiteCredito ?? 0).toLocaleString('es-AR')}`, alerta: false },
+                  { label: 'Disponible', valor: `$${Math.max(0, (cuentaCorriente.limiteCredito ?? 0) - cuentaCorriente.saldoActual).toLocaleString('es-AR')}`, alerta: ((cuentaCorriente.limiteCredito ?? 0) - cuentaCorriente.saldoActual) <= 0 },
+                ].map(({ label, valor, alerta }) => (
+                  <Box key={label} sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Typography sx={{ fontSize: '0.82rem', color: '#888780' }}>{label}</Typography>
+                    <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: alerta ? '#C62828' : '#2C2C2A' }}>{valor}</Typography>
+                  </Box>
+                ))}
                 {cuentaCorriente.saldoActual + total > (cuentaCorriente.limiteCredito ?? 0) && (
                   <Alert severity="error" sx={{ mt: 0.5, borderRadius: 2, py: 0.5, fontSize: '0.78rem' }}>
                     Límite insuficiente para esta compra de ${total.toLocaleString('es-AR')}
@@ -737,20 +955,30 @@ export default function CajaVentaPage() {
         </DialogActions>
       </Dialog>
 
-      {/* Dialog ticket */}
+      {/* Dialog — Venta cobrada */}
       <Dialog open={dialogTicket} maxWidth="xs" fullWidth slotProps={{ paper: { sx: { borderRadius: 3 } } }}>
-        <DialogTitle sx={{ fontWeight: 700, fontSize: '1.1rem', textAlign: 'center', pb: 1 }}>✓ Venta cobrada</DialogTitle>
+        {/* CSS para ocultar todo excepto el ticket al imprimir */}
+        <style>{`
+          @media print {
+            body > * { display: none !important; }
+            .ticket-print-area { display: block !important; }
+          }
+        `}</style>
+
+        <DialogTitle sx={{ fontWeight: 700, fontSize: '1.1rem', textAlign: 'center', pb: 1 }}>
+          ✓ Venta cobrada
+        </DialogTitle>
         <DialogContent>
           {ventaCobrada && (
-            <Box id="ticket-print" sx={{ fontFamily: 'monospace', fontSize: 13, lineHeight: 1.8 }}>
-              <Typography sx={{ textAlign: 'center', fontWeight: 700, fontFamily: 'monospace' }}>SUPERMERCADO</Typography>
+            <Box className="ticket-print-area" sx={{ fontFamily: 'monospace', fontSize: 13, lineHeight: 1.8 }}>
+              <Typography sx={{ textAlign: 'center', fontWeight: 700, fontFamily: 'monospace' }}>COMPROBANTE</Typography>
               <Typography sx={{ textAlign: 'center', fontSize: 11, color: '#B4B2A9', fontFamily: 'monospace' }}>================================</Typography>
               <Typography sx={{ fontSize: 11, fontFamily: 'monospace' }}>
                 Venta #{ventaCobrada.id} · {new Date(ventaCobrada.fechaHora).toLocaleString('es-AR')}
               </Typography>
-              <Typography sx={{ fontSize: 11, fontFamily: 'monospace' }}>Cajero: {empleado?.nombre ?? cajeroNombre}</Typography>
+              <Typography sx={{ fontSize: 11, fontFamily: 'monospace' }}>Cajero: {nombreCajero}</Typography>
               <Typography sx={{ fontSize: 11, color: '#B4B2A9', fontFamily: 'monospace', mb: 1 }}>
-                Cliente: {ventaCobrada.nombrePersona ?? 'Consumidor final'}
+                Cliente: {ventaCobrada.nombrePersona ?? 'Consumidor Final'}
               </Typography>
               <Typography sx={{ textAlign: 'center', fontSize: 11, color: '#B4B2A9', fontFamily: 'monospace' }}>--------------------------------</Typography>
               {ventaCobrada.items.map((item) => (
@@ -789,23 +1017,37 @@ export default function CajaVentaPage() {
             </Box>
           )}
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-          <Button variant="outlined" startIcon={<PrintOutlinedIcon />} onClick={() => window.print()}
-            sx={{ borderColor: '#E3E1DB', borderRadius: 2, color: '#3C3B38' }}>Imprimir</Button>
-          {comprobanteId && (
-            <Button variant="outlined"
-              startIcon={descargandoPdf ? <CircularProgress size={14} /> : <PictureAsPdfOutlinedIcon />}
-              onClick={() => void handleDescargarFactura()} disabled={descargandoPdf}
-              sx={{ borderColor: ACCENT, color: ACCENT, borderRadius: 2, fontWeight: 600, '&:hover': { bgcolor: ACCENT_BG, borderColor: ACCENT } }}>
-              Factura PDF
+
+        {/* Botones: fila superior con acciones secundarias, fila inferior con Nueva venta */}
+        <Box sx={{ px: 3, pb: 2.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              variant="outlined"
+              startIcon={<PrintOutlinedIcon sx={{ fontSize: 16 }} />}
+              onClick={() => window.print()}
+              sx={{ flex: 1, borderColor: '#E3E1DB', borderRadius: 2, color: '#5F5E5A', fontSize: '0.82rem',
+                '&:hover': { borderColor: '#888780', bgcolor: '#F4F3F1' } }}>
+              Imprimir
             </Button>
-          )}
+            {comprobanteId && (
+              <Button
+                variant="outlined"
+                startIcon={descargandoPdf ? <CircularProgress size={14} /> : <PictureAsPdfOutlinedIcon sx={{ fontSize: 16 }} />}
+                onClick={() => void handleDescargarFactura()}
+                disabled={descargandoPdf}
+                sx={{ flex: 1, borderColor: ACCENT, color: ACCENT, borderRadius: 2, fontSize: '0.82rem', fontWeight: 600,
+                  '&:hover': { bgcolor: ACCENT_BG }, '&.Mui-disabled': { borderColor: '#E3E1DB', color: '#B4B2A9' } }}>
+                Factura PDF
+              </Button>
+            )}
+          </Box>
           <Button fullWidth variant="contained" disableElevation onClick={handleNuevaVenta} autoFocus
-            sx={{ py: 1.2, borderRadius: 2, bgcolor: ACCENT, fontWeight: 600, '&:hover': { bgcolor: '#2E4A7A' } }}>
+            sx={{ py: 1.3, borderRadius: 2, bgcolor: ACCENT, fontWeight: 700, fontSize: '0.95rem', '&:hover': { bgcolor: '#2E4A7A' } }}>
             Nueva venta — Enter ↵
           </Button>
-        </DialogActions>
+        </Box>
       </Dialog>
+
     </Box>
   );
 }
